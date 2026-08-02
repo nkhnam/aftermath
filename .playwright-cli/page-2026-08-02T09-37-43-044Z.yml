@@ -1,0 +1,220 @@
+- generic [active] [ref=e1]:
+  - main [ref=e2]:
+    - generic [ref=e255]:
+      - generic [ref=e256]:
+        - generic [ref=e257]: AfterMath
+        - generic [ref=e260]:
+          - button "Share" [ref=e261]
+          - button "Present" [ref=e268]
+          - button "Replay" [ref=e272]
+          - button "Restart" [ref=e276]
+      - generic [ref=e282]:
+        - generic [ref=e283]:
+          - generic [ref=e284]:
+            - generic [ref=e285]: MANAGEABLE WITH SAFEGUARDS
+            - generic [ref=e289]:
+              - generic [ref=e290]: "15"
+              - generic [ref=e291]: /100
+            - paragraph [ref=e292]: Regret risk score — transparent scenario estimate
+          - generic [ref=e293]:
+            - generic [ref=e294]:
+              - paragraph [ref=e295]: Critical turning point
+              - paragraph [ref=e296]: Month 66
+            - generic [ref=e297]:
+              - paragraph [ref=e298]: Primary explanation
+              - paragraph [ref=e299]: The scenario is manageable with the current safeguards in place.
+        - generic [ref=e300]:
+          - paragraph [ref=e301]: SCORE BREAKDOWN — every contribution is visible
+          - generic [ref=e302]:
+            - generic [ref=e303]:
+              - generic [ref=e304]: ○ Post-reset housing burden above 50% of income
+              - generic [ref=e308]: "+7"
+            - generic [ref=e309]:
+              - generic [ref=e310]: ○ Emergency fund below six months of essential costs
+              - generic [ref=e314]: "+5"
+            - generic [ref=e315]:
+              - generic [ref=e316]: ○ Large change between introductory and post-introductory payment
+              - generic [ref=e320]: "+3"
+            - generic [ref=e321]:
+              - generic [ref=e322]: ○ High loan-to-income relationship
+              - generic [ref=e326]: "+4"
+            - generic [ref=e327]:
+              - generic [ref=e328]: ○ Hidden housing costs excluded from the headline mortgage payment
+              - generic [ref=e332]: "+6"
+            - generic [ref=e333]:
+              - generic [ref=e334]: ○ Income disruption exhausting emergency reserves
+              - generic [ref=e338]: "+6"
+            - generic [ref=e339]:
+              - generic [ref=e340]: ● No long fixed-rate protection
+              - generic [ref=e344]: "+3"
+      - generic [ref=e345]:
+        - heading "Consequence Timeline" [level=3] [ref=e346]
+        - generic [ref=e347]:
+          - generic [ref=e349]:
+            - generic [ref=e350]: Start
+            - generic [ref=e353]: M3
+            - generic [ref=e356]: M6
+            - generic [ref=e359]: M9
+            - generic [ref=e362]: M12
+            - generic [ref=e365]: M15
+            - generic [ref=e368]: M18
+            - generic [ref=e371]: M21
+            - generic [ref=e374]: M24
+            - generic [ref=e377]: M27
+            - generic [ref=e380]: M30
+            - generic [ref=e383]: M33
+            - generic [ref=e386]: M36
+          - generic [ref=e389]:
+            - generic [ref=e394]:
+              - generic [ref=e395]: MONTH 1
+              - heading "Decision Begins" [level=4] [ref=e397]
+              - paragraph [ref=e398]: "Introductory period starts. Monthly payment: ₫13.7M."
+              - generic [ref=e399]:
+                - generic [ref=e400]:
+                  - generic [ref=e401]: "Payment:"
+                  - text: 13.7M ₫
+                - generic [ref=e402]:
+                  - generic [ref=e403]: "Cash flow:"
+                  - text: 6.6M ₫
+                - generic [ref=e404]:
+                  - generic [ref=e405]: "Emergency fund:"
+                  - text: 406.6M ₫
+            - generic [ref=e515]:
+              - generic [ref=e516]: MONTH 61
+              - heading "Interest-Rate Reset" [level=4] [ref=e518]
+              - paragraph [ref=e519]: Payment rises from ₫13.7M to ₫15.4M (+13%).
+              - generic [ref=e520]:
+                - generic [ref=e521]:
+                  - generic [ref=e522]: "Payment:"
+                  - text: 15.4M ₫
+                - generic [ref=e523]:
+                  - generic [ref=e524]: "Cash flow:"
+                  - text: 4.9M ₫
+                - generic [ref=e525]:
+                  - generic [ref=e526]: "Emergency fund:"
+                  - text: 801.2M ₫
+            - generic [ref=e532]:
+              - generic [ref=e533]:
+                - generic [ref=e534]: MONTH 66
+                - generic [ref=e535]: TURNING POINT
+              - heading "Cash-Flow Pressure Point" [level=4] [ref=e536]
+              - paragraph [ref=e537]: Monthly cash flow turns negative during income disruption. Fund remains at ₫777.5M (18 months of coverage).
+              - generic [ref=e538]:
+                - generic [ref=e539]:
+                  - generic [ref=e540]: "Payment:"
+                  - text: 15.4M ₫
+                - generic [ref=e541]:
+                  - generic [ref=e542]: "Cash flow:"
+                  - text: "-43,126,704 ₫"
+                - generic [ref=e543]:
+                  - generic [ref=e544]: "Emergency fund:"
+                  - text: 777.5M ₫
+      - generic [ref=e476]:
+        - heading "Safer Alternative" [level=3] [ref=e481]
+        - generic [ref=e546]:
+          - generic [ref=e547]:
+            - generic [ref=e548]:
+              - paragraph [ref=e549]: Before
+              - text: "81"
+            - generic [ref=e550]: −47
+            - generic [ref=e555]:
+              - paragraph [ref=e556]: After
+              - text: "34"
+          - generic [ref=e557]:
+            - generic [ref=e558]:
+              - generic [ref=e559]: Risk score
+              - generic [ref=e560]:
+                - generic [ref=e561]: 81/100
+                - generic [ref=e564]: 34/100
+            - generic [ref=e565]:
+              - generic [ref=e566]: Monthly payment
+              - generic [ref=e567]:
+                - generic [ref=e568]: 25.3M ₫
+                - generic [ref=e571]: 15.4M ₫
+            - generic [ref=e572]:
+              - generic [ref=e573]: Payment increase
+              - generic [ref=e574]:
+                - generic [ref=e575]: +38%
+                - generic [ref=e578]: +13%
+            - generic [ref=e579]:
+              - generic [ref=e580]: Housing/income
+              - generic [ref=e581]:
+                - generic [ref=e582]: 53%
+                - generic [ref=e585]: 32%
+            - generic [ref=e586]:
+              - generic [ref=e587]: Fixed period
+              - generic [ref=e588]:
+                - generic [ref=e589]: 12 months
+                - generic [ref=e592]: 60 months
+            - generic [ref=e593]:
+              - generic [ref=e594]: Emergency fund
+              - generic [ref=e595]:
+                - generic [ref=e596]: 300M ₫
+                - generic [ref=e599]: 400M ₫
+          - generic [ref=e600]:
+            - paragraph [ref=e601]: UPDATED CONSEQUENCE TIMELINE — SAFER SCENARIO
+            - generic [ref=e602]:
+              - heading "Consequence Timeline" [level=3] [ref=e603]
+              - generic [ref=e604]:
+                - generic [ref=e606]:
+                  - generic [ref=e607]: Start
+                  - generic [ref=e610]: M3
+                  - generic [ref=e613]: M6
+                  - generic [ref=e616]: M9
+                  - generic [ref=e619]: M12
+                  - generic [ref=e622]: M15
+                  - generic [ref=e625]: M18
+                  - generic [ref=e628]: M21
+                  - generic [ref=e631]: M24
+                  - generic [ref=e634]: M27
+                  - generic [ref=e637]: M30
+                  - generic [ref=e640]: M33
+                  - generic [ref=e643]: M36
+                - generic [ref=e646]:
+                  - generic [ref=e651]:
+                    - generic [ref=e652]: MONTH 1
+                    - heading "Decision Begins" [level=4] [ref=e654]
+                    - paragraph [ref=e655]: "Introductory period starts. Monthly payment: ₫13.7M."
+                    - generic [ref=e656]:
+                      - generic [ref=e657]:
+                        - generic [ref=e658]: "Payment:"
+                        - text: 13.7M ₫
+                      - generic [ref=e659]:
+                        - generic [ref=e660]: "Cash flow:"
+                        - text: 6.6M ₫
+                      - generic [ref=e661]:
+                        - generic [ref=e662]: "Emergency fund:"
+                        - text: 406.6M ₫
+                  - generic [ref=e667]:
+                    - generic [ref=e668]: MONTH 61
+                    - heading "Interest-Rate Reset" [level=4] [ref=e670]
+                    - paragraph [ref=e671]: Payment rises from ₫13.7M to ₫15.4M (+13%).
+                    - generic [ref=e672]:
+                      - generic [ref=e673]:
+                        - generic [ref=e674]: "Payment:"
+                        - text: 15.4M ₫
+                      - generic [ref=e675]:
+                        - generic [ref=e676]: "Cash flow:"
+                        - text: 4.9M ₫
+                      - generic [ref=e677]:
+                        - generic [ref=e678]: "Emergency fund:"
+                        - text: 801.2M ₫
+                  - generic [ref=e684]:
+                    - generic [ref=e685]:
+                      - generic [ref=e686]: MONTH 66
+                      - generic [ref=e687]: TURNING POINT
+                    - heading "Cash-Flow Pressure Point" [level=4] [ref=e688]
+                    - paragraph [ref=e689]: Monthly cash flow turns negative during income disruption. Fund remains at ₫777.5M (18 months of coverage).
+                    - generic [ref=e690]:
+                      - generic [ref=e691]:
+                        - generic [ref=e692]: "Payment:"
+                        - text: 15.4M ₫
+                      - generic [ref=e693]:
+                        - generic [ref=e694]: "Cash flow:"
+                        - text: "-43,126,704 ₫"
+                      - generic [ref=e695]:
+                        - generic [ref=e696]: "Emergency fund:"
+                        - text: 777.5M ₫
+    - paragraph [ref=e59]: AfterMath uses synthetic demonstration data. Scores are transparent scenario estimates — not financial advice, not predictions, and not a substitute for professional consultation.
+  - button "Open Next.js Dev Tools" [ref=e65] [cursor=pointer]
+  - alert [ref=e69]

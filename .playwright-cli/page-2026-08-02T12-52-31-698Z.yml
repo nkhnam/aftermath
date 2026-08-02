@@ -1,0 +1,20 @@
+- generic [active] [ref=e1]:
+  - main [ref=e2]:
+    - button "Select a scenario" [ref=e4] [cursor=pointer]:
+      - generic [ref=e6]:
+        - generic [ref=e7]: AFTERMATH
+        - heading "See the financial aftermath before you sign." [level=1] [ref=e10]: See the financial aftermathbefore you sign.
+        - paragraph [ref=e11]: Choose a scenario to analyze
+        - generic [ref=e12]:
+          - button "High Risk Risky Apartment Teaser-rate mortgage, thin savings, high hidden costs Score ~81/100" [ref=e13]:
+            - generic [ref=e14]: High Risk
+            - paragraph [ref=e17]: Risky Apartment
+            - paragraph [ref=e18]: Teaser-rate mortgage, thin savings, high hidden costs
+            - paragraph [ref=e19]: Score ~81/100
+          - button "Lower Risk Safer Apartment Longer fixed-rate, larger fund, lower hidden costs Score ~34/100" [ref=e20]:
+            - generic [ref=e21]: Lower Risk
+            - paragraph [ref=e24]: Safer Apartment
+            - paragraph [ref=e25]: Longer fixed-rate, larger fund, lower hidden costs
+            - paragraph [ref=e26]: Score ~34/100
+      - generic [ref=e27]: Powered by Alibaba Cloud
+  - button "Open Next.js Dev Tools" [ref=e33] [cursor=pointer]
