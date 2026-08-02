@@ -14,6 +14,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { AgentFinding, AgentStatus } from "@/lib/types";
+import { useT } from "@/lib/i18n";
 
 const ICONS: Record<string, LucideIcon> = {
   FileText,
@@ -25,27 +26,23 @@ const ICONS: Record<string, LucideIcon> = {
 
 const STATUS_CONFIG: Record<
   AgentStatus,
-  { color: string; icon: React.ReactNode; label: string }
+  { color: string; icon: React.ReactNode }
 > = {
   waiting: {
     color: "var(--text-muted)",
     icon: <Clock className="h-3.5 w-3.5" />,
-    label: "Waiting",
   },
   analyzing: {
     color: "var(--accent-blue)",
     icon: <Loader2 className="h-3.5 w-3.5 animate-spin" />,
-    label: "Working",
   },
   completed: {
     color: "var(--accent-green)",
     icon: <CheckCircle2 className="h-3.5 w-3.5" />,
-    label: "Finding",
   },
   warning: {
     color: "var(--accent-red)",
     icon: <AlertTriangle className="h-3.5 w-3.5" />,
-    label: "Warning",
   },
 };
 
@@ -65,11 +62,25 @@ interface AgentCardProps {
 }
 
 export function AgentCard({ finding, status, index, isDecision = false }: AgentCardProps) {
+  const { t, ts, tsEvidence } = useT();
   const Icon = ICONS[finding.iconName] ?? FileText;
   const statusConfig = STATUS_CONFIG[status];
   const accent = ACCENT_COLORS[finding.accentColor] ?? "var(--text-secondary)";
   const isActive = status === "analyzing" || status === "completed" || status === "warning";
   const showContent = status === "completed" || status === "warning";
+
+  // Translate status labels
+  const statusLabel = status === "waiting" ? t("agent.waiting")
+    : status === "analyzing" ? t("agent.working")
+    : status === "completed" ? t("agent.finding")
+    : t("agent.warning");
+
+  // Translate agent name and role from agentId
+  const agentName = t(`agent.${finding.agentId}.name`);
+  const agentRole = t(`agent.${finding.agentId}.role`);
+
+  // Translate structured evidence
+  const evidenceStrings = tsEvidence(finding.evidence);
 
   return (
     <motion.div
@@ -111,7 +122,7 @@ export function AgentCard({ finding, status, index, isDecision = false }: AgentC
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className={`font-semibold ${isDecision ? "text-sm" : "text-sm"}`}>
-              {finding.agentName}
+              {agentName}
             </span>
             {isDecision && showContent && (
               <span
@@ -121,12 +132,12 @@ export function AgentCard({ finding, status, index, isDecision = false }: AgentC
                   color: "var(--bg-base)",
                 }}
               >
-                VERDICT
+                {t("agent.verdict")}
               </span>
             )}
           </div>
           <p className="truncate text-[10px] text-[var(--text-muted)]">
-            {finding.agentRole}
+            {agentRole}
           </p>
         </div>
 
@@ -136,7 +147,7 @@ export function AgentCard({ finding, status, index, isDecision = false }: AgentC
           style={{ color: statusConfig.color, backgroundColor: `${statusConfig.color}15` }}
         >
           {statusConfig.icon}
-          {statusConfig.label}
+          {statusLabel}
         </span>
       </div>
 
@@ -152,18 +163,18 @@ export function AgentCard({ finding, status, index, isDecision = false }: AgentC
           >
             {/* Finding — one-liner */}
             <p className={`mb-2 font-medium ${isDecision ? "text-sm" : "text-xs"}`}>
-              {finding.finding}
+              {ts(finding.finding)}
             </p>
 
             {/* Evidence — compact inline */}
             <div className="mb-2 flex flex-wrap gap-x-3 gap-y-1">
-              {finding.evidence.map((e, i) => (
+              {evidenceStrings.map((e, i) => (
                 <span
                   key={i}
                   className="text-[10px] tabular-nums text-[var(--text-secondary)]"
                 >
                   {e}
-                  {i < finding.evidence.length - 1 && (
+                  {i < evidenceStrings.length - 1 && (
                     <span className="ml-3 text-[var(--text-muted)]">·</span>
                   )}
                 </span>
@@ -173,18 +184,18 @@ export function AgentCard({ finding, status, index, isDecision = false }: AgentC
             {/* Calculation summary — monospace */}
             <div className="mb-2 rounded bg-[var(--bg-base)] px-2.5 py-1.5">
               <p className="text-[10px] tabular-nums text-[var(--text-secondary)]">
-                {finding.calculationSummary}
+                {ts(finding.calculation)}
               </p>
             </div>
 
             {/* Explanation + evidence count in one row */}
             <div className="flex items-center gap-3">
               <p className="flex-1 text-[10px] text-[var(--text-secondary)]">
-                {finding.explanation}
+                {ts(finding.explanation)}
               </p>
               <span className="flex shrink-0 items-center gap-1 text-[10px] tabular-nums text-[var(--text-muted)]">
                 <CheckCircle2 className="h-3 w-3" style={{ color: accent }} />
-                {finding.evidence.length} checks
+                {t("agent.checks", { n: evidenceStrings.length })}
               </span>
             </div>
           </motion.div>

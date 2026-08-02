@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { FinancialScenario, AnalysisResult, AppState } from "@/lib/types";
 import { riskyScenario } from "@/lib/scenarios";
@@ -9,22 +9,29 @@ import { CinematicIntro } from "@/components/cinematic-intro";
 import { AgentWorkflow } from "@/components/agent-workflow";
 import { AftermathResult } from "@/components/aftermath-result";
 import { ArchitectureView } from "@/components/architecture-view";
+import { CustomScenarioForm } from "@/components/custom-scenario-form";
 import { Disclaimer } from "@/components/disclaimer";
+import { LanguageToggle } from "@/components/language-toggle";
 
 export default function Home() {
+  // ?demo=1 — skip the intro for judges / quick demos.
   const [appState, setAppState] = useState<AppState>("intro");
   const [scenario, setScenario] = useState<FinancialScenario>(riskyScenario);
-  const [result, setResult] = useState<AnalysisResult | null>(null);
   const [presentationMode, setPresentationMode] = useState(false);
   const [showArchitecture, setShowArchitecture] = useState(false);
 
-  // Pre-compute the risky scenario analysis immediately on mount
-  const analysisRef = useRef<AnalysisResult | null>(null);
+  // Pre-compute the risky scenario analysis synchronously so the result
+  // page is ready when needed (?demo=1 shortcut or after scenario selection).
+  const [result, setResult] = useState<AnalysisResult | null>(
+    () => runAnalysis(riskyScenario),
+  );
+
+  // Apply the demo shortcut after hydration so server and client markup match.
   useEffect(() => {
-    if (!analysisRef.current) {
-      analysisRef.current = runAnalysis(riskyScenario);
-      setResult(analysisRef.current);
-    }
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("demo") !== "1") return;
+    const timer = window.setTimeout(() => setAppState("result"), 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   const handleEnterAnalysis = useCallback(() => {
@@ -33,23 +40,25 @@ export default function Home() {
 
   const handleSelectScenario = useCallback((newScenario: FinancialScenario) => {
     setScenario(newScenario);
-    analysisRef.current = runAnalysis(newScenario);
-    setResult(analysisRef.current);
+    setResult(runAnalysis(newScenario));
+  }, []);
+
+  const handleSelectCustom = useCallback(() => {
+    setAppState("custom");
+  }, []);
+
+  const handleCustomAnalyze = useCallback((customScenario: FinancialScenario) => {
+    setScenario(customScenario);
+    setResult(runAnalysis(customScenario));
+    setAppState("analyzing");
   }, []);
 
   const handleAnalysisComplete = useCallback(() => {
     setAppState("result");
   }, []);
 
-  const handleRestart = useCallback(() => {
+  const handleDemo = useCallback(() => {
     setAppState("intro");
-    setResult(null);
-    analysisRef.current = null;
-    // Re-compute on next mount cycle
-    setTimeout(() => {
-      analysisRef.current = runAnalysis(riskyScenario);
-      setResult(analysisRef.current);
-    }, 100);
   }, []);
 
   const handleReplay = useCallback(() => {
@@ -59,6 +68,10 @@ export default function Home() {
 
   return (
     <main className="min-h-screen flex flex-col">
+      {/* Language toggle — always visible */}
+      <div className="fixed right-4 top-4 z-[60]">
+        <LanguageToggle />
+      </div>
       <AnimatePresence mode="wait">
         {appState === "intro" && (
           <motion.div
@@ -68,7 +81,29 @@ export default function Home() {
             transition={{ duration: 0.6 }}
             className="flex-1"
           >
-            <CinematicIntro scenario={scenario} onEnter={handleEnterAnalysis} onSelectScenario={handleSelectScenario} />
+            <CinematicIntro
+              scenario={scenario}
+              onEnter={handleEnterAnalysis}
+              onSelectScenario={handleSelectScenario}
+              onSelectCustom={handleSelectCustom}
+              onDemoResult={() => setAppState("result")}
+            />
+          </motion.div>
+        )}
+
+        {appState === "custom" && (
+          <motion.div
+            key="custom"
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.5 }}
+            className="flex-1"
+          >
+            <CustomScenarioForm
+              onBack={() => setAppState("intro")}
+              onAnalyze={handleCustomAnalyze}
+            />
           </motion.div>
         )}
 
@@ -100,7 +135,7 @@ export default function Home() {
           >
             <AftermathResult
               result={result}
-              onRestart={handleRestart}
+              onDemo={handleDemo}
               onReplay={handleReplay}
               presentationMode={presentationMode}
               onTogglePresentation={() => setPresentationMode((p) => !p)}
@@ -117,7 +152,7 @@ export default function Home() {
         )}
       </AnimatePresence>
 
-      {!presentationMode && appState !== "intro" && <Disclaimer />}
+      {!presentationMode && appState !== "intro" && appState !== "custom" && <Disclaimer />}
     </main>
   );
 }

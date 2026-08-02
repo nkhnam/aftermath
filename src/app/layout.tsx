@@ -1,10 +1,16 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { I18nProvider } from "@/lib/i18n";
 
 export const metadata: Metadata = {
-  title: "AfterMath — See the financial aftermath before you sign",
+  title: "AfterMath — Xem trước hậu quả tài chính trước khi ký",
   description:
-    "AfterMath simulates the hidden financial consequences of major loan decisions before you commit. Powered by Alibaba Cloud. A synthetic hackathon scenario tool for financial pre-mortem analysis.",
+    "AfterMath mô phỏng những hậu quả tài chính ẩn của các quyết định vay lớn trước khi bạn cam kết.",
+  openGraph: {
+    title: "AfterMath — Tiền kiểm cho quyết định tài chính lớn",
+    description:
+      "Xem trước hậu quả tài chính trước khi ký với mô phỏng tiền kiểm minh bạch.",
+  },
 };
 
 export default function RootLayout({
@@ -13,9 +19,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full antialiased">
+    <html lang="vi" className="h-full antialiased" suppressHydrationWarning>
       <body className="min-h-full flex flex-col bg-[var(--bg-base)] text-[var(--text-primary)]">
-        {children}
+        <I18nProvider>{children}</I18nProvider>
       </body>
     </html>
   );

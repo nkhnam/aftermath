@@ -1,9 +1,0 @@
-- generic [active] [ref=e1]:
-  - main [ref=e2]:
-    - button "Skip intro and start analysis" [ref=e38] [cursor=pointer]:
-      - generic [ref=e5]:
-        - heading "This home looks affordable today." [level=1] [ref=e40]
-        - paragraph [ref=e45]: Press Space to skip
-      - generic [ref=e27]: Powered by Alibaba Cloud
-  - button "Open Next.js Dev Tools" [ref=e33] [cursor=pointer]
-  - alert [ref=e37]

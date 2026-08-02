@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ChevronRight, Activity } from "lucide-react";
 import type { AnalysisResult, AgentStatus } from "@/lib/types";
 import { AgentCard } from "./agent-card";
+import { useT } from "@/lib/i18n";
 
 interface AgentWorkflowProps {
   result: AnalysisResult;
@@ -18,6 +19,7 @@ export function AgentWorkflow({
   result,
   onComplete,
 }: AgentWorkflowProps) {
+  const { t } = useT();
   const [currentAgent, setCurrentAgent] = useState(0);
   const completedRef = useRef(false);
 
@@ -64,15 +66,15 @@ export function AgentWorkflow({
         <div className="mb-1 flex items-center gap-2">
           <Activity className="h-5 w-5 text-[var(--accent-blue)]" />
           <h2 className="text-xl font-bold tracking-tight">
-            Financial Pre-Mortem Analysis
+            {t("workflow.title")}
           </h2>
           <span className="flex items-center gap-1 text-xs text-[var(--text-muted)]">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--accent-blue)]" />
-            ANALYZING
+            {t("workflow.analyzing")}
           </span>
         </div>
         <p className="text-sm text-[var(--text-secondary)]">
-          Five analysis modules processing scenario data — {result.scenario.label}
+          {t("workflow.subtitle")} — {t(result.scenario.labelKey ?? "custom.title")}
         </p>
       </div>
 
@@ -80,8 +82,7 @@ export function AgentWorkflow({
       <div className="mb-6">
         <div className="mb-2 flex items-center justify-between">
           <span className="text-xs text-[var(--text-muted)]">
-            Module {Math.min(currentAgent + 1, result.findings.length)} of{" "}
-            {result.findings.length}
+            {t("workflow.moduleOf", { current: Math.min(currentAgent + 1, result.findings.length), total: result.findings.length })}
           </span>
           {allDone ? (
             <motion.span
@@ -89,11 +90,11 @@ export function AgentWorkflow({
               animate={{ opacity: 1 }}
               className="text-xs font-medium text-[var(--accent-green)]"
             >
-              Analysis complete
+              {t("workflow.complete")}
             </motion.span>
           ) : (
             <span className="text-xs tabular-nums text-[var(--text-muted)]">
-              Risk:{" "}
+              {t("workflow.risk")}:{" "}
               <span
                 className={
                   liveScore >= 70
@@ -141,7 +142,7 @@ export function AgentWorkflow({
             onClick={onComplete}
             className="text-xs text-[var(--text-muted)] transition-colors hover:text-[var(--text-secondary)]"
           >
-            Skip to result →
+            {t("workflow.skipToResult")}
           </button>
         </div>
       )}
@@ -158,7 +159,7 @@ export function AgentWorkflow({
               onClick={onComplete}
               className="group flex items-center gap-2 rounded-xl bg-[var(--accent-amber)] px-8 py-3.5 font-semibold text-[var(--bg-base)] transition-all hover:bg-[var(--accent-amber)]/90 hover:shadow-lg hover:shadow-[var(--accent-amber)]/20"
             >
-              See the aftermath
+              {t("workflow.seeAftermath")}
               <ChevronRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
             </button>
           </motion.div>
@@ -167,7 +168,7 @@ export function AgentWorkflow({
 
       {/* Powered by Alibaba Cloud */}
       <div className="mt-8 text-center text-[10px] text-[var(--text-muted)]">
-        Powered by Alibaba Cloud · Deterministic analysis engine
+        {t("workflow.poweredBy")}
       </div>
     </div>
   );

@@ -1,7 +1,8 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { X, Cloud, Cpu, Database, Shield, GitBranch, Zap } from "lucide-react";
+import { X, Cloud, Cpu, Database, Shield, GitBranch, Zap, Sparkles } from "lucide-react";
+import { useT } from "@/lib/i18n";
 
 interface ArchitectureViewProps {
   onClose: () => void;
@@ -10,74 +11,57 @@ interface ArchitectureViewProps {
 const ARCHITECTURE_LAYERS = [
   {
     icon: Cloud,
-    title: "Alibaba Cloud Compute",
-    subtitle: "Next.js 16 · Turbopack · Static prerendering",
-    items: [
-      "Fully static prerendered pages — zero server-side computation",
-      "Client-side deterministic computation — zero API latency",
-      "Deployed on Vercel edge network with Alibaba Cloud infrastructure",
-    ],
+    titleKey: "arch.layer1.title",
+    subtitleKey: "arch.layer1.subtitle",
+    itemKeys: ["arch.layer1.item1", "arch.layer1.item2", "arch.layer1.item3"],
     color: "var(--accent-blue)",
   },
   {
     icon: Cpu,
-    title: "Deterministic Engine Layer",
-    subtitle: "Pure TypeScript financial simulation",
-    items: [
-      "Amortization formula: P = L × r × (1+r)ⁿ / ((1+r)ⁿ - 1)",
-      "240-month cashflow simulation (20-year loan term)",
-      "7-factor transparent risk scoring (0–100 scale)",
-      "Zero randomness — every result is reproducible",
-    ],
+    titleKey: "arch.layer2.title",
+    subtitleKey: "arch.layer2.subtitle",
+    itemKeys: ["arch.layer2.item1", "arch.layer2.item2", "arch.layer2.item3", "arch.layer2.item4"],
     color: "var(--accent-amber)",
   },
   {
     icon: GitBranch,
-    title: "Analysis Modules",
-    subtitle: "Five deterministic modules — no LLM dependency",
-    items: [
-      "Terms → Cashflow → Hidden Cost → Shock → Decision Engine",
-      "Each module: finding, evidence, calculation summary, transparency",
-      "Decision Engine synthesizes all findings into a transparent score",
-    ],
+    titleKey: "arch.layer3.title",
+    subtitleKey: "arch.layer3.subtitle",
+    itemKeys: ["arch.layer3.item1", "arch.layer3.item2", "arch.layer3.item3"],
     color: "var(--accent-green)",
   },
   {
     icon: Database,
-    title: "Data Layer",
-    subtitle: "Synthetic scenarios — no real financial data",
-    items: [
-      "Two preset scenarios: Risky (score 81) and Safer (score 34)",
-      "All amounts in VND (Vietnamese Dong)",
-      "No database, no authentication, no external storage",
-    ],
+    titleKey: "arch.layer4.title",
+    subtitleKey: "arch.layer4.subtitle",
+    itemKeys: ["arch.layer4.item1", "arch.layer4.item2", "arch.layer4.item3"],
     color: "var(--accent-blue)",
   },
   {
     icon: Shield,
-    title: "Safety & Ethics",
-    subtitle: "Transparent by design",
-    items: [
-      "Every score contribution is visible to the user",
-      "Not financial advice — synthetic demonstration only",
-      "No predictions, no ML, no opacity",
-    ],
+    titleKey: "arch.layer5.title",
+    subtitleKey: "arch.layer5.subtitle",
+    itemKeys: ["arch.layer5.item1", "arch.layer5.item2", "arch.layer5.item3"],
     color: "var(--accent-green)",
   },
   {
     icon: Zap,
-    title: "Performance",
-    subtitle: "Sub-100ms analysis",
-    items: [
-      "Full 240-month simulation runs in <5ms",
-      "All 5 analysis modules computed synchronously",
-      "Framer Motion 60fps animations with GPU acceleration",
-    ],
+    titleKey: "arch.layer6.title",
+    subtitleKey: "arch.layer6.subtitle",
+    itemKeys: ["arch.layer6.item1", "arch.layer6.item2", "arch.layer6.item3"],
     color: "var(--accent-amber)",
+  },
+  {
+    icon: Sparkles,
+    titleKey: "arch.layer7.title",
+    subtitleKey: "arch.layer7.subtitle",
+    itemKeys: ["arch.layer7.item1", "arch.layer7.item2", "arch.layer7.item3"],
+    color: "var(--accent-blue)",
   },
 ];
 
 export function ArchitectureView({ onClose }: ArchitectureViewProps) {
+  const { t } = useT();
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -97,15 +81,15 @@ export function ArchitectureView({ onClose }: ArchitectureViewProps) {
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-6 py-5">
           <div>
-            <h2 className="text-xl font-bold tracking-tight">System Architecture</h2>
+            <h2 className="text-xl font-bold tracking-tight">{t("arch.title")}</h2>
             <p className="mt-1 text-sm text-[var(--text-secondary)]">
-              Powered by Alibaba Cloud · Deterministic by design
+              {t("arch.subtitle")}
             </p>
           </div>
           <button
             onClick={onClose}
             className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border-subtle)] transition-colors hover:border-[var(--border-strong)]"
-            aria-label="Close architecture view"
+            aria-label={t("arch.close")}
           >
             <X className="h-4 w-4" />
           </button>
@@ -116,15 +100,19 @@ export function ArchitectureView({ onClose }: ArchitectureViewProps) {
           {/* Flow diagram */}
           <div className="mb-8 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-6">
             <div className="flex flex-col items-center gap-3 lg:flex-row lg:justify-between">
-              <FlowNode label="User Input" sublabel="Scenario" color="var(--accent-blue)" />
+              <FlowNode label={t("arch.flow.userInput")} sublabel={t("arch.flow.scenario")} color="var(--accent-blue)" />
               <FlowArrow />
-              <FlowNode label="Engine" sublabel="Simulation" color="var(--accent-amber)" />
+              <FlowNode label={t("arch.flow.engine")} sublabel={t("arch.flow.simulation")} color="var(--accent-amber)" />
               <FlowArrow />
-              <FlowNode label="Modules" sublabel="5 sequential" color="var(--accent-green)" />
+              <FlowNode label={t("arch.flow.modules")} sublabel={t("arch.flow.sequential")} color="var(--accent-green)" />
               <FlowArrow />
-              <FlowNode label="Score" sublabel="0–100" color="var(--accent-red)" />
+              <FlowNode label={t("arch.flow.score")} sublabel="0–100" color="var(--accent-red)" />
               <FlowArrow />
-              <FlowNode label="Timeline" sublabel="Consequences" color="var(--accent-amber)" />
+              <FlowNode label={t("arch.flow.timeline")} sublabel={t("arch.flow.consequences")} color="var(--accent-amber)" />
+              <FlowArrow />
+              <FlowNode label={t("arch.flow.qwen")} sublabel={t("arch.flow.optional")} color="var(--accent-blue)" />
+              <FlowArrow />
+              <FlowNode label={t("arch.flow.explanation")} sublabel={t("arch.flow.optional")} color="var(--accent-blue)" />
             </div>
           </div>
 
@@ -134,7 +122,7 @@ export function ArchitectureView({ onClose }: ArchitectureViewProps) {
               const Icon = layer.icon;
               return (
                 <motion.div
-                  key={layer.title}
+                  key={layer.titleKey}
                   initial={{ opacity: 0, y: 15 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.08 }}
@@ -148,18 +136,18 @@ export function ArchitectureView({ onClose }: ArchitectureViewProps) {
                       <Icon className="h-4 w-4" />
                     </div>
                     <div>
-                      <h3 className="text-sm font-semibold">{layer.title}</h3>
-                      <p className="text-[10px] text-[var(--text-muted)]">{layer.subtitle}</p>
+                      <h3 className="text-sm font-semibold">{t(layer.titleKey)}</h3>
+                      <p className="text-[10px] text-[var(--text-muted)]">{t(layer.subtitleKey)}</p>
                     </div>
                   </div>
                   <ul className="space-y-1">
-                    {layer.items.map((item, j) => (
+                    {layer.itemKeys.map((itemKey, j) => (
                       <li
                         key={j}
                         className="flex items-start gap-1.5 text-xs text-[var(--text-secondary)]"
                       >
                         <span className="mt-0.5 text-[var(--text-muted)]">▸</span>
-                        <span>{item}</span>
+                        <span>{t(itemKey)}</span>
                       </li>
                     ))}
                   </ul>
@@ -172,8 +160,7 @@ export function ArchitectureView({ onClose }: ArchitectureViewProps) {
         {/* Footer */}
         <div className="border-t border-[var(--border-subtle)] px-6 py-4 text-center">
           <p className="text-xs text-[var(--text-muted)]">
-            AfterMath — AI Financial Pre-Mortem · Powered by Alibaba Cloud ·
-            Synthetic hackathon scenario · Not financial advice
+            {t("arch.footer")}
           </p>
         </div>
       </motion.div>

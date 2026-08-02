@@ -4,7 +4,8 @@ import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { TrendingDown, AlertTriangle, Zap, Calendar, Play, Pause } from "lucide-react";
 import type { ConsequenceEvent, MonthlySimulation } from "@/lib/types";
-import { formatVND } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
+import { formatCurrencyCompact, formatMonthShort } from "@/lib/formatters";
 
 interface ConsequenceTimelineProps {
   events: ConsequenceEvent[];
@@ -30,6 +31,7 @@ export function ConsequenceTimeline({
   simulation,
   initialFund,
 }: ConsequenceTimelineProps) {
+  const { t, ts, lang } = useT();
   const [currentMonth, setCurrentMonth] = useState(0);
   const [paused, setPaused] = useState(false);
   const [showCritical, setShowCritical] = useState(false);
@@ -112,29 +114,29 @@ export function ConsequenceTimeline({
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-bold tracking-tight">Consequence Timeline</h3>
+          <h3 className="text-lg font-bold tracking-tight">{t("timeline.title")}</h3>
           <p className="text-xs text-[var(--text-muted)]">
             {done
-              ? "Full timeline — all events visible"
-              : `Playing month ${currentMonth} of ${DISPLAY_MONTHS}...`}
+              ? t("timeline.fullTimeline")
+              : t("timeline.playing", { current: currentMonth, total: DISPLAY_MONTHS })}
           </p>
         </div>
         <button
           onClick={handleTogglePlay}
           className="flex items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] px-2.5 py-1 text-xs text-[var(--text-secondary)] transition-colors hover:border-[var(--border-strong)]"
-          aria-label={done ? "Replay timeline" : userPaused ? "Play timeline" : "Pause timeline"}
+          aria-label={done ? t("timeline.replay") : userPaused ? t("timeline.play") : t("timeline.pause")}
         >
           {done ? (
             <>
-              <Play className="h-3 w-3" /> Replay
+              <Play className="h-3 w-3" /> {t("timeline.replay")}
             </>
           ) : userPaused ? (
             <>
-              <Play className="h-3 w-3" /> Play
+              <Play className="h-3 w-3" /> {t("timeline.play")}
             </>
           ) : (
             <>
-              <Pause className="h-3 w-3" /> Pause
+              <Pause className="h-3 w-3" /> {t("timeline.pause")}
             </>
           )}
         </button>
@@ -144,11 +146,11 @@ export function ConsequenceTimeline({
       <div className="mb-6">
         <div className="mb-2 flex items-center justify-between">
           <span className="text-xs font-medium text-[var(--text-secondary)]">
-            Emergency Reserve
+            {t("timeline.emergencyReserve")}
           </span>
           <div className="flex items-center gap-2">
             <span className="text-sm font-bold tabular-nums" style={{ color: fundColor }}>
-              {formatVND(fundLevel)}
+              {formatCurrencyCompact(fundLevel, lang)}
             </span>
             <span className="text-xs text-[var(--text-muted)] tabular-nums">
               {fundPct.toFixed(0)}%
@@ -170,7 +172,7 @@ export function ConsequenceTimeline({
           <div
             className="absolute top-0 h-full w-0.5 bg-[var(--accent-red)]/50"
             style={{ left: `${criticalThresholdPct()}%` }}
-            title="Critical threshold"
+            title={t("timeline.criticalThreshold")}
           />
           {/* Drain animation — shimmer effect */}
           {fundPct < 30 && !done && (
@@ -187,11 +189,11 @@ export function ConsequenceTimeline({
         </div>
         {/* Month indicator */}
         <div className="mt-1 flex justify-between text-[10px] text-[var(--text-muted)]">
-          <span>Month 1</span>
+          <span>{t("timeline.monthStart")}</span>
           <span style={{ color: currentSim?.isDisruption ? "var(--accent-red)" : "inherit" }}>
-            {currentSim?.isDisruption ? "⚠ Income disrupted" : "Income stable"}
+            {currentSim?.isDisruption ? t("timeline.incomeDisrupted") : t("timeline.incomeStable")}
           </span>
-          <span>Month {DISPLAY_MONTHS}</span>
+          <span>{t("timeline.month")} {DISPLAY_MONTHS}</span>
         </div>
       </div>
 
@@ -202,7 +204,7 @@ export function ConsequenceTimeline({
             <div key={month} className="flex flex-col items-center">
               <div className="h-2 w-px bg-[var(--border-subtle)]" />
               <span className="mt-0.5 text-[9px] text-[var(--text-muted)]">
-                {month === 0 ? "M1" : `M${month}`}
+                {month === 0 ? formatMonthShort(1, lang) : formatMonthShort(month, lang)}
               </span>
             </div>
           ))}
@@ -286,7 +288,7 @@ export function ConsequenceTimeline({
                       className="text-[10px] font-bold"
                       style={{ color: config.color }}
                     >
-                      MONTH {event.month}
+                      {t("timeline.month")} {event.month}
                     </span>
                     {isCritical && (
                       <span
@@ -297,26 +299,28 @@ export function ConsequenceTimeline({
                         }}
                       >
                         {event.severity === "critical"
-                          ? "CRITICAL TURNING POINT"
-                          : "TURNING POINT"}
+                          ? t("timeline.criticalTurningPoint")
+                          : t("timeline.turningPoint")}
                       </span>
                     )}
                   </div>
-                  <h4 className="mt-0.5 text-sm font-semibold">{event.label}</h4>
+                  <h4 className="mt-0.5 text-sm font-semibold">
+                    {t(`event.${event.eventType}.label`)}
+                  </h4>
                   <p className="mt-0.5 text-xs text-[var(--text-secondary)]">
-                    {event.description}
+                    {ts(event.description)}
                   </p>
 
                   {/* Mini stats — inline */}
                   <div className="mt-2 flex flex-wrap gap-3 text-[10px]">
                     <span className="text-[var(--text-muted)]">
-                      Payment:{" "}
+                      {t("timeline.payment")}:{" "}
                       <span className="tabular-nums text-[var(--text-secondary)]">
-                        {formatVND(event.monthlyPayment)}
+                        {formatCurrencyCompact(event.monthlyPayment, lang)}
                       </span>
                     </span>
                     <span className="text-[var(--text-muted)]">
-                      Cash flow:{" "}
+                      {t("timeline.cashFlow")}:{" "}
                       <span
                         className="tabular-nums"
                         style={{
@@ -326,13 +330,13 @@ export function ConsequenceTimeline({
                               : "var(--text-secondary)",
                         }}
                       >
-                        {formatVND(event.monthlyCashFlow)}
+                        {formatCurrencyCompact(event.monthlyCashFlow, lang)}
                       </span>
                     </span>
                     <span className="text-[var(--text-muted)]">
-                      Reserve:{" "}
+                      {t("timeline.reserve")}:{" "}
                       <span className="tabular-nums text-[var(--text-secondary)]">
-                        {formatVND(event.emergencyFund)}
+                        {formatCurrencyCompact(event.emergencyFund, lang)}
                       </span>
                     </span>
                   </div>
@@ -343,7 +347,7 @@ export function ConsequenceTimeline({
         </AnimatePresence>
       </div>
 
-      {/* CRITICAL MOMENT OVERLAY — Month 19 dramatic interruption */}
+      {/* CRITICAL MOMENT OVERLAY — dramatic interruption */}
       <AnimatePresence>
         {showCritical && (
           <motion.div
@@ -372,16 +376,16 @@ export function ConsequenceTimeline({
                 className="mt-4 text-5xl font-bold tabular-nums"
                 style={{ color: "var(--accent-red)" }}
               >
-                MONTH {criticalTurningPoint}
+                {t("timeline.month")} {criticalTurningPoint}
               </h2>
               <p className="mt-2 text-lg font-semibold text-[var(--text-primary)]">
-                Breaking Point
+                {t("timeline.breakingPoint")}
               </p>
               <p className="mt-1 text-sm text-[var(--text-secondary)]">
-                Reserve drops below 3 months of essential costs
+                {t("timeline.reserveBelow3")}
               </p>
               <p className="mt-2 text-2xl font-bold tabular-nums" style={{ color: fundColor }}>
-                {formatVND(fundLevel)}
+                {formatCurrencyCompact(fundLevel, lang)}
               </p>
             </motion.div>
           </motion.div>

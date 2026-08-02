@@ -4,6 +4,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Download, Copy, Check, X } from "lucide-react";
 import type { AnalysisResult, ShareVariant } from "@/lib/types";
+import { useT } from "@/lib/i18n";
 
 interface ShareCardProps {
   result: AnalysisResult;
@@ -22,6 +23,7 @@ const VARIANTS: {
 ];
 
 export function ShareCard({ result, onClose }: ShareCardProps) {
+  const { t } = useT();
   const [variant, setVariant] = useState<ShareVariant>("16:9");
   const [copied, setCopied] = useState(false);
 
@@ -36,17 +38,30 @@ export function ShareCard({ result, onClose }: ShareCardProps) {
 
   const riskLabel =
     result.riskScore >= 70
-      ? "HIGH REGRET RISK"
+      ? t("result.highRegret")
       : result.riskScore >= 50
-        ? "ELEVATED RISK"
+        ? t("result.elevated")
         : result.riskScore >= 30
-          ? "MANAGEABLE WITH SAFEGUARDS"
-          : "LOW RISK";
+          ? t("result.manageable")
+          : t("result.lowRisk");
 
+  const scenarioLabel = t(result.scenario.labelKey ?? "custom.title");
   const currentVariant = VARIANTS.find((v) => v.id === variant)!;
 
   const handleCopy = async () => {
-    const text = `AfterMath — Financial Pre-Mortem\n\n"${result.scenario.label}"\nRisk Score: ${result.riskScore}/100 (${riskLabel})\nBreaking Point: Month ${result.criticalTurningPoint}\n\nWould you sign this mortgage?\n\nAfterMath simulates the hidden consequences of loan decisions before you commit.\n\nPowered by Alibaba Cloud · Synthetic scenario — not financial advice.`;
+    const text = [
+      `AfterMath — ${t("term.financialPreMortem")}`,
+      "",
+      `"${scenarioLabel}"`,
+      `${t("share.copy.riskScore")}: ${result.riskScore}/100 (${riskLabel})`,
+      `${t("share.copy.breakingPoint")}: ${t("timeline.month")} ${result.criticalTurningPoint}`,
+      "",
+      t("share.copy.question"),
+      "",
+      t("share.copy.tagline"),
+      "",
+      t("share.copy.notAdvice"),
+    ].join("\n");
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
@@ -57,7 +72,7 @@ export function ShareCard({ result, onClose }: ShareCardProps) {
   };
 
   const handleDownload = () => {
-    const svg = generateSVG(result, riskLabel, scoreColor, currentVariant);
+    const svg = generateSVG(result, scenarioLabel, riskLabel, t("share.breakingPoint"), t("timeline.month"), t("share.notAdvice"), scoreColor, currentVariant);
     const blob = new Blob([svg], { type: "image/svg+xml" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -86,7 +101,7 @@ export function ShareCard({ result, onClose }: ShareCardProps) {
         <button
           onClick={onClose}
           className="absolute -right-3 -top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border-strong)] bg-[var(--bg-elevated)]"
-          aria-label="Close share card"
+          aria-label={t("share.close")}
         >
           <X className="h-4 w-4" />
         </button>
@@ -99,6 +114,7 @@ export function ShareCard({ result, onClose }: ShareCardProps) {
           {/* Render based on variant */}
           <SocialCardContent
             result={result}
+            scenarioLabel={scenarioLabel}
             riskLabel={riskLabel}
             scoreColor={scoreColor}
             variant={variant}
@@ -133,7 +149,7 @@ export function ShareCard({ result, onClose }: ShareCardProps) {
               className="flex items-center gap-2 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-4 py-2 text-sm transition-colors hover:border-[var(--accent-amber)]"
             >
               <Download className="h-4 w-4" />
-              Download
+              {t("share.download")}
             </button>
             <button
               onClick={handleCopy}
@@ -142,12 +158,12 @@ export function ShareCard({ result, onClose }: ShareCardProps) {
               {copied ? (
                 <>
                   <Check className="h-4 w-4 text-[var(--accent-green)]" />
-                  Copied
+                  {t("share.copied")}
                 </>
               ) : (
                 <>
                   <Copy className="h-4 w-4" />
-                  Copy text
+                  {t("share.copyText")}
                 </>
               )}
             </button>
@@ -164,17 +180,20 @@ export function ShareCard({ result, onClose }: ShareCardProps) {
 
 function SocialCardContent({
   result,
+  scenarioLabel,
   riskLabel,
   scoreColor,
   variant,
 }: {
   result: AnalysisResult;
+  scenarioLabel: string;
   riskLabel: string;
   scoreColor: string;
   variant: ShareVariant;
   width: number;
   height: number;
 }) {
+  const { t, ts } = useT();
   const isWide = variant === "16:9";
   const isSquare = variant === "1:1";
 
@@ -203,13 +222,13 @@ function SocialCardContent({
 
   const turningPoint = (
     <div className="rounded-lg bg-[var(--bg-elevated)] px-3 py-1.5">
-      <span className="text-[10px] text-[var(--text-muted)]">Breaking point</span>
-      <p className="text-sm font-bold tabular-nums">Month {result.criticalTurningPoint}</p>
+      <span className="text-[10px] text-[var(--text-muted)]">{t("share.breakingPoint")}</span>
+      <p className="text-sm font-bold tabular-nums">{t("timeline.month")} {result.criticalTurningPoint}</p>
     </div>
   );
 
   const poweredBy = (
-    <span className="text-[9px] text-[var(--text-muted)]">Powered by Alibaba Cloud</span>
+    <span className="text-[9px] text-[var(--text-muted)]">{t("disclaimer.poweredBy")} {t("disclaimer.poweredByName")}</span>
   );
 
   if (isWide) {
@@ -220,7 +239,7 @@ function SocialCardContent({
         <div className="flex items-center justify-between">
           {brand}
           <span className="rounded-full border border-[var(--border-subtle)] px-2 py-0.5 text-[9px] text-[var(--text-muted)]">
-            Synthetic Scenario
+            {result.scenario.isCustom ? t("share.userGenerated") : t("share.syntheticScenario")}
           </span>
         </div>
 
@@ -228,9 +247,9 @@ function SocialCardContent({
         <div className="flex flex-1 items-center gap-6">
           <div className="flex-1">
             <p className="mb-1 text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
-              Decision
+              {t("share.decision")}
             </p>
-            <p className="mb-3 text-sm font-medium">{result.scenario.label}</p>
+            <p className="mb-3 text-sm font-medium">{scenarioLabel}</p>
             {score}
             <p className="mt-1 text-xs font-bold" style={{ color: scoreColor }}>
               {riskLabel}
@@ -239,9 +258,9 @@ function SocialCardContent({
           <div className="flex flex-col gap-2">
             {turningPoint}
             <div className="max-w-[200px] rounded-lg bg-[var(--bg-elevated)] px-3 py-1.5">
-              <span className="text-[10px] text-[var(--text-muted)]">Hidden consequence</span>
+              <span className="text-[10px] text-[var(--text-muted)]">{t("share.hiddenConsequence")}</span>
               <p className="text-[10px] text-[var(--text-secondary)]">
-                {result.primaryExplanation}
+                {ts(result.primaryExplanation)}
               </p>
             </div>
           </div>
@@ -251,7 +270,7 @@ function SocialCardContent({
         <div className="flex items-center justify-between border-t border-[var(--border-subtle)] pt-2">
           {poweredBy}
           <span className="text-[9px] text-[var(--text-muted)]">
-            Not financial advice · Synthetic data
+            {t("share.notAdvice")}
           </span>
         </div>
       </div>
@@ -270,14 +289,14 @@ function SocialCardContent({
         {/* Center — score */}
         <div className="flex flex-col items-center">
           <p className="mb-2 text-xs uppercase tracking-wider text-[var(--text-muted)]">
-            Regret Risk Score
+            {t("share.regretRiskScore")}
           </p>
           {score}
           <p className="mt-2 text-sm font-bold" style={{ color: scoreColor }}>
             {riskLabel}
           </p>
           <p className="mt-1 text-xs text-[var(--text-secondary)]">
-            {result.scenario.label}
+            {scenarioLabel}
           </p>
         </div>
 
@@ -285,7 +304,7 @@ function SocialCardContent({
         <div className="flex flex-col items-center gap-1.5">
           {turningPoint}
           <span className="text-[10px] text-[var(--text-muted)]">
-            See the aftermath before you sign
+            {t("share.seeAftermath")}
           </span>
           {poweredBy}
         </div>
@@ -300,14 +319,14 @@ function SocialCardContent({
       <div className="flex items-center justify-between">
         {brand}
         <span className="rounded-full border border-[var(--border-subtle)] px-2 py-0.5 text-[8px] text-[var(--text-muted)]">
-          Synthetic
+          {result.scenario.isCustom ? t("share.userGenerated") : t("share.synthetic")}
         </span>
       </div>
 
       {/* Center — score */}
       <div className="flex flex-col items-center gap-3">
         <p className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
-          {result.scenario.label}
+          {scenarioLabel}
         </p>
         {score}
         <p className="text-sm font-bold" style={{ color: scoreColor }}>
@@ -315,7 +334,7 @@ function SocialCardContent({
         </p>
         <div className="mt-2 max-w-[260px] text-center">
           <p className="text-xs text-[var(--text-secondary)]">
-            {result.primaryExplanation}
+            {ts(result.primaryExplanation)}
           </p>
         </div>
       </div>
@@ -324,7 +343,7 @@ function SocialCardContent({
       <div className="flex flex-col items-center gap-2">
         {turningPoint}
         <p className="text-[10px] text-[var(--text-muted)]">
-          See the aftermath before you sign
+          {t("share.seeAftermath")}
         </p>
         {poweredBy}
       </div>
@@ -338,7 +357,11 @@ function SocialCardContent({
 
 function generateSVG(
   result: AnalysisResult,
+  scenarioLabel: string,
   riskLabel: string,
+  breakingPointLabel: string,
+  monthLabel: string,
+  notAdviceLabel: string,
   scoreColor: string,
   variant: { id: ShareVariant; width: number; height: number },
 ): string {
@@ -350,25 +373,28 @@ function generateSVG(
   const scoreY = variant.id === "16:9" ? h * 0.5 : h * 0.4;
   const scoreSize = variant.id === "1:1" ? 64 : 48;
 
+  // Escape XML special characters
+  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
   <rect width="${w}" height="${h}" fill="#07090f"/>
   <rect x="16" y="16" width="${w - 32}" height="${h - 32}" rx="12" fill="none" stroke="#1e2638" stroke-width="1"/>
-  
+
   <!-- Brand -->
   <rect x="24" y="${brandY - 14}" width="16" height="16" rx="3" fill="#f5a623"/>
   <text x="46" y="${brandY}" font-family="Arial" font-size="13" font-weight="bold" fill="#f5f3ef">AfterMath</text>
-  
+
   <!-- Score -->
   <text x="${w / 2}" y="${scoreY}" text-anchor="middle" font-family="Arial" font-size="${scoreSize}" font-weight="bold" fill="${scoreColor}">${score}</text>
-  <text x="${w / 2}" y="${scoreY + 18}" text-anchor="middle" font-family="Arial" font-size="12" fill="#5a6378">/100 · ${riskLabel}</text>
-  
+  <text x="${w / 2}" y="${scoreY + 18}" text-anchor="middle" font-family="Arial" font-size="12" fill="#5a6378">/100 · ${esc(riskLabel)}</text>
+
   <!-- Scenario -->
-  <text x="${w / 2}" y="${scoreY + 40}" text-anchor="middle" font-family="Arial" font-size="11" fill="#8b94a8">${result.scenario.label}</text>
-  
+  <text x="${w / 2}" y="${scoreY + 40}" text-anchor="middle" font-family="Arial" font-size="11" fill="#8b94a8">${esc(scenarioLabel)}</text>
+
   <!-- Turning point -->
-  <text x="${w / 2}" y="${h - 50}" text-anchor="middle" font-family="Arial" font-size="11" font-weight="600" fill="#f5f3ef">Breaking point: Month ${tp}</text>
-  
+  <text x="${w / 2}" y="${h - 50}" text-anchor="middle" font-family="Arial" font-size="11" font-weight="600" fill="#f5f3ef">${esc(breakingPointLabel)}: ${esc(monthLabel)} ${tp}</text>
+
   <!-- Footer -->
-  <text x="${w / 2}" y="${h - 24}" text-anchor="middle" font-family="Arial" font-size="8" fill="#5a6378">Powered by Alibaba Cloud · Synthetic scenario · Not financial advice</text>
+  <text x="${w / 2}" y="${h - 24}" text-anchor="middle" font-family="Arial" font-size="8" fill="#5a6378">${esc(notAdviceLabel)}</text>
 </svg>`;
 }

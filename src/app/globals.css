@@ -181,3 +181,22 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Form inputs */
+.form-input {
+  width: 100%;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-base);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  transition: border-color 0.15s;
+}
+.form-input:focus {
+  outline: none;
+  border-color: var(--accent-amber);
+}
+.form-input::placeholder {
+  color: var(--text-muted);
+}

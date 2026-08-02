@@ -1,18 +1,39 @@
-import type { FinancialScenario, AgentFinding, AnalysisResult, SensitivityResult } from "./types";
-import { getScenarioMetrics, totalHousingBurden } from "./financial-engine";
-import { calculateRiskScore } from "./scoring-engine";
-import { formatVND, formatPct } from "./utils";
+import type {
+  FinancialScenario,
+  AgentFinding,
+  AnalysisResult,
+  SensitivityResult,
+} from "./types";
+import type { StructuredEvidence } from "./i18n-types";
+import {
+  getScenarioMetrics,
+  totalHousingBurden,
+  runMonthlySimulation,
+  findCriticalTurningPoint,
+  generateConsequenceEvents,
+} from "./financial-engine";
+import { calculateRiskScore, getRiskLevel, so } from "./scoring-engine";
+import { optimizeScenario } from "./optimizer";
 
 // ============================================================================
 // AfterMath — Analysis Module Definitions
 // Five deterministic analysis modules that evaluate the financial scenario.
 // Transparent computation. No hidden AI. Only findings, evidence, and explanations.
+//
+// All output uses STRUCTURED DATA (type + raw values) for locale-aware
+// rendering at display time.
 // ============================================================================
 
+/** Helper: build a StructuredEvidence */
+function se(
+  type: string,
+  values: Record<string, string | number> = {},
+): StructuredEvidence {
+  return { type, values };
+}
+
 /** Build all 5 agent findings for a given scenario */
-export function buildAgentFindings(
-  scenario: FinancialScenario,
-): AgentFinding[] {
+export function buildAgentFindings(scenario: FinancialScenario): AgentFinding[] {
   return [
     buildTermsAgent(scenario),
     buildCashflowAgent(scenario),
@@ -26,39 +47,56 @@ export function buildAgentFindings(
 function buildTermsAgent(scenario: FinancialScenario): AgentFinding {
   const m = getScenarioMetrics(scenario);
   const isFixed = scenario.isFixedRate;
-  const finding = isFixed
-    ? "The loan has a fixed rate for the full term — no reset risk."
-    : `The introductory rate of ${formatPct(scenario.introductoryRate)} resets to ${formatPct(scenario.postIntroductoryRate)} after ${scenario.introductoryPeriodMonths} months.`;
 
-  const evidence: string[] = [
-    `Introductory rate: ${formatPct(scenario.introductoryRate)}`,
+  const finding = isFixed
+    ? so("agent.terms.finding.fixed", {})
+    : so("agent.terms.finding.variable", {
+        introRate: scenario.introductoryRate,
+        postRate: scenario.postIntroductoryRate,
+        months: scenario.introductoryPeriodMonths,
+      });
+
+  const evidence: StructuredEvidence[] = [
+    se("agent.terms.evidence.introRate", { rate: scenario.introductoryRate }),
     ...(isFixed
-      ? [`Fixed for full ${scenario.loanTermYears}-year term`]
+      ? [se("agent.terms.evidence.fixedTerm", { years: scenario.loanTermYears })]
       : [
-          `Post-introductory rate: ${formatPct(scenario.postIntroductoryRate)}`,
-          `Rate resets at: month ${scenario.introductoryPeriodMonths + 1}`,
+          se("agent.terms.evidence.postRate", { rate: scenario.postIntroductoryRate }),
+          se("agent.terms.evidence.resetAt", { month: scenario.introductoryPeriodMonths + 1 }),
         ]),
-    `Loan duration: ${scenario.loanTermYears} years (${scenario.loanTermYears * 12} months)`,
-    `Repayment structure: fully amortizing`,
+    se("agent.terms.evidence.duration", {
+      years: scenario.loanTermYears,
+      months: scenario.loanTermYears * 12,
+    }),
+    se("agent.terms.evidence.amortizing", {}),
   ];
 
-  const calculationSummary = isFixed
-    ? `Fixed payment of ${formatVND(m.introPayment)}/month for ${scenario.loanTermYears * 12} months.`
-    : `Intro payment ${formatVND(m.introPayment)} → Post-reset payment ${formatVND(m.postResetPayment)} (+${m.paymentIncreasePct.toFixed(0)}%).`;
+  const calculation = isFixed
+    ? so("agent.terms.calc.fixed", {
+        payment: m.introPayment,
+        months: scenario.loanTermYears * 12,
+      })
+    : so("agent.terms.calc.variable", {
+        introPay: m.introPayment,
+        postPay: m.postResetPayment,
+        pct: m.paymentIncreasePct,
+      });
 
   const hasWarning = !isFixed && m.paymentIncreasePct > 20;
 
+  const explanation = hasWarning
+    ? so("agent.terms.explanation.warning", {
+        pct: m.paymentIncreasePct,
+        month: scenario.introductoryPeriodMonths + 1,
+      })
+    : so("agent.terms.explanation.stable", {});
+
   return {
     agentId: "terms",
-    agentName: "Terms Analysis",
-    agentRole: "Loan terms & interest-rate analysis",
     finding,
     evidence,
-    calculationSummary,
-    confidence: 95,
-    explanation: hasWarning
-      ? `The ${m.paymentIncreasePct.toFixed(0)}% payment increase at month ${scenario.introductoryPeriodMonths + 1} is significant. The household should verify they can sustain the higher payment.`
-      : "The loan terms are stable with no rate-reset risk.",
+    calculation,
+    explanation,
     status: hasWarning ? "warning" : "completed",
     iconName: "FileText",
     accentColor: hasWarning ? "amber" : "blue",
@@ -69,42 +107,48 @@ function buildTermsAgent(scenario: FinancialScenario): AgentFinding {
 function buildCashflowAgent(scenario: FinancialScenario): AgentFinding {
   const m = getScenarioMetrics(scenario);
   const housingCosts = totalHousingBurden(scenario);
+  const additionalDebt = scenario.additionalMonthlyDebt ?? 0;
   const totalHousing = m.postResetPayment + housingCosts;
-  const totalMonthly = totalHousing + scenario.monthlyLivingExpenses;
+  const totalMonthly = totalHousing + scenario.monthlyLivingExpenses + additionalDebt;
   const remainingCash = scenario.monthlyIncome - totalMonthly;
   const ratio = (m.postResetPayment / scenario.monthlyIncome) * 100;
   const totalRatio = (totalHousing / scenario.monthlyIncome) * 100;
 
   const finding =
     remainingCash < 0
-      ? `The household runs a monthly deficit of ${formatVND(Math.abs(remainingCash))} after the rate reset.`
-      : `The household has ${formatVND(remainingCash)} remaining after all costs.`;
+      ? so("agent.cashflow.finding.deficit", { deficit: Math.abs(remainingCash) })
+      : so("agent.cashflow.finding.surplus", { surplus: remainingCash });
 
-  const evidence: string[] = [
-    `Monthly payment: ${formatVND(m.postResetPayment)}`,
-    `Payment-to-income ratio: ${ratio.toFixed(0)}% (mortgage only)`,
-    `Total housing-to-income: ${totalRatio.toFixed(0)}%`,
-    `Living expenses: ${formatVND(scenario.monthlyLivingExpenses)}`,
-    `Remaining monthly cash: ${formatVND(remainingCash)}`,
-    `Emergency-fund runway: ${m.emergencyRunway} months`,
+  const evidence: StructuredEvidence[] = [
+    se("agent.cashflow.evidence.monthlyPayment", { payment: m.postResetPayment }),
+    se("agent.cashflow.evidence.paymentIncomeRatio", { ratio }),
+    se("agent.cashflow.evidence.totalHousingIncome", { ratio: totalRatio }),
+    se("agent.cashflow.evidence.livingExpenses", { expenses: scenario.monthlyLivingExpenses }),
+    se("agent.cashflow.evidence.remainingCash", { cash: remainingCash }),
+    se("agent.cashflow.evidence.emergencyRunway", { months: m.emergencyRunway }),
   ];
 
-  const calculationSummary =
-    `Income ${formatVND(scenario.monthlyIncome)} − Housing ${formatVND(totalHousing)} − Living ${formatVND(scenario.monthlyLivingExpenses)} = ${formatVND(remainingCash)}/month`;
+  const calculation = so("agent.cashflow.calc", {
+    income: scenario.monthlyIncome,
+    housing: totalHousing,
+    living: scenario.monthlyLivingExpenses,
+    cash: remainingCash,
+  });
 
   const hasWarning = remainingCash < 0 || totalRatio > 50;
 
+  const explanation = hasWarning
+    ? remainingCash < 0
+      ? so("agent.cashflow.explanation.warning.deficit", { ratio: totalRatio })
+      : so("agent.cashflow.explanation.warning.thin", { ratio: totalRatio })
+    : so("agent.cashflow.explanation.healthy", {});
+
   return {
     agentId: "cashflow",
-    agentName: "Cashflow Analysis",
-    agentRole: "Monthly cash-flow & payment-to-income analysis",
     finding,
     evidence,
-    calculationSummary,
-    confidence: 92,
-    explanation: hasWarning
-      ? `With total housing consuming ${totalRatio.toFixed(0)}% of income and a ${remainingCash < 0 ? "negative" : "thin"} monthly surplus, the household has little buffer for unexpected costs.`
-      : "Cash flow is healthy with adequate surplus each month.",
+    calculation,
+    explanation,
     status: hasWarning ? "warning" : "completed",
     iconName: "Wallet",
     accentColor: hasWarning ? "red" : "green",
@@ -119,34 +163,44 @@ function buildHiddenCostAgent(scenario: FinancialScenario): AgentFinding {
   const hiddenPct = (housingCosts / totalHousing) * 100;
   const incomePct = (housingCosts / scenario.monthlyIncome) * 100;
 
-  const finding = `Hidden housing costs of ${formatVND(housingCosts)}/month represent ${hiddenPct.toFixed(0)}% of total housing costs.`;
+  const finding = so("agent.hidden-cost.finding", {
+    costs: housingCosts,
+    pct: hiddenPct,
+  });
 
-  const evidence: string[] = [
-    `Maintenance: ${formatVND(scenario.monthlyMaintenance)}`,
-    `Insurance: ${formatVND(scenario.monthlyInsurance)}`,
-    `Furnishing & repair: ${formatVND(scenario.monthlyFurnishingRepair)}`,
-    `Management fees: ${formatVND(scenario.monthlyManagementFees)}`,
-    `Total hidden: ${formatVND(housingCosts)}/month`,
-    `Mortgage payment: ${formatVND(m.postResetPayment)}`,
-    `True total housing: ${formatVND(totalHousing)}/month`,
+  const evidence: StructuredEvidence[] = [
+    se("agent.hidden-cost.evidence.maintenance", { value: scenario.monthlyMaintenance }),
+    se("agent.hidden-cost.evidence.insurance", { value: scenario.monthlyInsurance }),
+    se("agent.hidden-cost.evidence.furnishing", { value: scenario.monthlyFurnishingRepair }),
+    se("agent.hidden-cost.evidence.management", { value: scenario.monthlyManagementFees }),
+    se("agent.hidden-cost.evidence.totalHidden", { value: housingCosts }),
+    se("agent.hidden-cost.evidence.mortgagePayment", { value: m.postResetPayment }),
+    se("agent.hidden-cost.evidence.trueTotal", { value: totalHousing }),
   ];
 
-  const calculationSummary =
-    `Mortgage ${formatVND(m.postResetPayment)} + Hidden ${formatVND(housingCosts)} = ${formatVND(totalHousing)}/month total housing burden (${incomePct.toFixed(0)}% of income).`;
+  const calculation = so("agent.hidden-cost.calc", {
+    mortgage: m.postResetPayment,
+    hidden: housingCosts,
+    total: totalHousing,
+    pct: incomePct,
+  });
 
   const hasWarning = incomePct > 15;
 
+  const explanation = hasWarning
+    ? so("agent.hidden-cost.explanation.warning", {
+        pct: incomePct,
+        total: totalHousing,
+        mortgage: m.postResetPayment,
+      })
+    : so("agent.hidden-cost.explanation.healthy", {});
+
   return {
     agentId: "hidden-cost",
-    agentName: "Hidden Cost Analysis",
-    agentRole: "Costs excluded from the headline mortgage payment",
     finding,
     evidence,
-    calculationSummary,
-    confidence: 88,
-    explanation: hasWarning
-      ? `These costs are ${incomePct.toFixed(0)}% of income and are often overlooked. The true housing burden is ${formatVND(totalHousing)}/month, not just the mortgage of ${formatVND(m.postResetPayment)}.`
-      : "Hidden costs are a manageable share of income.",
+    calculation,
+    explanation,
     status: hasWarning ? "warning" : "completed",
     iconName: "Search",
     accentColor: hasWarning ? "amber" : "blue",
@@ -157,42 +211,61 @@ function buildHiddenCostAgent(scenario: FinancialScenario): AgentFinding {
 function buildShockAgent(scenario: FinancialScenario): AgentFinding {
   const m = getScenarioMetrics(scenario);
   const housingCosts = totalHousingBurden(scenario);
+  const additionalDebt = scenario.additionalMonthlyDebt ?? 0;
   const essentialMonthly =
-    scenario.monthlyLivingExpenses + housingCosts + m.postResetPayment;
+    scenario.monthlyLivingExpenses + housingCosts + m.postResetPayment + additionalDebt;
   const disruptionDrain = essentialMonthly * scenario.incomeDisruptionMonths;
   const fundAfter = scenario.currentSavings - disruptionDrain;
   const fundSurvives = fundAfter > 0;
-  const survivalMonths = Math.floor(fundAfter / essentialMonthly);
+  const survivalMonths = fundSurvives ? Math.floor(fundAfter / essentialMonthly) : 0;
 
   const finding = fundSurvives
-    ? `A ${scenario.incomeDisruptionMonths}-month income loss would leave ${formatVND(fundAfter)} — about ${survivalMonths} months of runway.`
-    : `A ${scenario.incomeDisruptionMonths}-month income loss would exhaust the emergency fund.`;
+    ? so("agent.shock.finding.survives", {
+        months: scenario.incomeDisruptionMonths,
+        fund: fundAfter,
+        runway: survivalMonths,
+      })
+    : so("agent.shock.finding.exhausted", {
+        months: scenario.incomeDisruptionMonths,
+      });
 
-  const evidence: string[] = [
-    `Income disruption: ${scenario.incomeDisruptionMonths} months`,
-    `Monthly essential costs: ${formatVND(essentialMonthly)}`,
-    `Total disruption drain: ${formatVND(disruptionDrain)}`,
-    `Emergency fund: ${formatVND(scenario.currentSavings)}`,
-    `Fund after disruption: ${formatVND(Math.max(0, fundAfter))}`,
-    `Runway remaining: ${survivalMonths} months`,
+  const evidence: StructuredEvidence[] = [
+    se("agent.shock.evidence.disruption", { months: scenario.incomeDisruptionMonths }),
+    se("agent.shock.evidence.essentialCosts", { costs: essentialMonthly }),
+    se("agent.shock.evidence.disruptionDrain", { drain: disruptionDrain }),
+    se("agent.shock.evidence.emergencyFund", { fund: scenario.currentSavings }),
+    se("agent.shock.evidence.fundAfter", { fund: Math.max(0, fundAfter) }),
+    se("agent.shock.evidence.runway", { months: survivalMonths }),
   ];
 
-  const calculationSummary =
-    `Fund ${formatVND(scenario.currentSavings)} − Disruption ${formatVND(disruptionDrain)} = ${formatVND(Math.max(0, fundAfter))} remaining (${survivalMonths} months).`;
+  const calculation = so("agent.shock.calc", {
+    fund: scenario.currentSavings,
+    drain: disruptionDrain,
+    remaining: Math.max(0, fundAfter),
+    months: survivalMonths,
+  });
 
   const hasWarning = survivalMonths < 3 || !fundSurvives;
 
+  const explanation = hasWarning
+    ? !fundSurvives
+      ? so("agent.shock.explanation.warning.exhausted", {
+          months: scenario.incomeDisruptionMonths,
+          costs: essentialMonthly,
+        })
+      : so("agent.shock.explanation.warning.survives", {
+          months: scenario.incomeDisruptionMonths,
+          costs: essentialMonthly,
+          runway: survivalMonths,
+        })
+    : so("agent.shock.explanation.healthy", {});
+
   return {
     agentId: "shock",
-    agentName: "Shock Analysis",
-    agentRole: "Income disruption & emergency resilience simulation",
     finding,
     evidence,
-    calculationSummary,
-    confidence: 85,
-    explanation: hasWarning
-      ? `During a ${scenario.incomeDisruptionMonths}-month disruption, the household must cover ${formatVND(essentialMonthly)}/month with zero income. ${fundSurvives ? `The fund survives but only ${survivalMonths} months of runway remain.` : "The fund is exhausted."}`
-      : "The emergency fund comfortably absorbs the disruption.",
+    calculation,
+    explanation,
     status: hasWarning ? "warning" : "completed",
     iconName: "Zap",
     accentColor: hasWarning ? "red" : "green",
@@ -205,62 +278,80 @@ function buildDecisionAgent(scenario: FinancialScenario): AgentFinding {
   const triggered = factors.filter((f) => f.triggered);
   const topFactor = triggered.sort((a, b) => b.contribution - a.contribution)[0];
 
-  const riskLevel =
-    score >= 70 ? "HIGH REGRET RISK" :
-    score >= 50 ? "ELEVATED RISK" :
-    score >= 30 ? "MANAGEABLE WITH SAFEGUARDS" :
-    "LOW RISK";
+  const levelKey =
+    score >= 70 ? "result.highRegret" :
+    score >= 50 ? "result.elevated" :
+    score >= 30 ? "result.manageable" :
+    "result.lowRisk";
 
-  const finding = `${riskLevel} — Score ${score}/100. ${triggered.length} risk factor${triggered.length !== 1 ? "s" : ""} triggered.`;
+  const finding =
+    triggered.length === 1
+      ? so("agent.decision.finding.single", { level: levelKey, score })
+      : so("agent.decision.finding.plural", { level: levelKey, score, count: triggered.length });
 
-  const evidence: string[] = factors
+  const evidence: StructuredEvidence[] = factors
     .filter((f) => f.triggered)
-    .map((f) => `${f.label}: +${f.contribution} pts`);
+    .map((f) =>
+      se("agent.decision.evidence.factor", {
+        label: `riskfactor.${f.id}.label`,
+        contribution: f.contribution,
+      }),
+    );
 
-  const calculationSummary =
-    `Risk score: ${score}/100 — ${triggered.length} of ${factors.length} factors triggered (${triggered.reduce((s, f) => s + f.contribution, 0)} of ${factors.reduce((s, f) => s + f.maxContribution, 0)} max points).`;
+  const triggeredPts = triggered.reduce((s, f) => s + f.contribution, 0);
+  const maxPts = factors.reduce((s, f) => s + f.maxContribution, 0);
+
+  const calculation = so("agent.decision.calc", {
+    score,
+    triggered: triggered.length,
+    total: factors.length,
+    triggeredPts,
+    maxPts,
+  });
 
   const hasWarning = score >= 50;
 
+  const explanation = topFactor
+    ? so("agent.decision.explanation.hasTopFactor", {
+        label: `riskfactor.${topFactor.id}.label`,
+      })
+    : so("agent.decision.explanation.noFactors", {});
+
   return {
     agentId: "decision",
-    agentName: "Decision Engine",
-    agentRole: "Combined risk scoring & recommendation",
     finding,
     evidence,
-    calculationSummary,
-    confidence: 90,
-    explanation: topFactor
-      ? `Primary risk driver: ${topFactor.label}. ${topFactor.description}`
-      : "No significant risk factors triggered.",
+    calculation,
+    explanation,
     status: hasWarning ? "warning" : "completed",
     iconName: "Scale",
-    accentColor: score >= 70 ? "red" : score >= 50 ? "amber" : score >= 30 ? "amber" : "green",
+    accentColor:
+      score >= 70 ? "red" : score >= 50 ? "amber" : score >= 30 ? "amber" : "green",
   };
 }
 
 // ============================================================================
-// Full Analysis Engine — ties everything together
+// Sensitivity Analysis
 // ============================================================================
-
-import { runMonthlySimulation, findCriticalTurningPoint, generateConsequenceEvents } from "./financial-engine";
-import { getRiskLevel } from "./scoring-engine";
-import { saferScenario } from "./scenarios";
 
 /**
  * Compute sensitivity ranking — tests each key parameter change individually
  * against the original scenario to show which single adjustment has the most
- * impact on the risk score. This addresses the "engineered scenario" critique.
+ * impact on the risk score.
  */
 function computeSensitivityRanking(
   scenario: FinancialScenario,
 ): SensitivityResult[] {
   const originalScore = calculateRiskScore(scenario).score;
 
-  const tests: { label: string; param: keyof FinancialScenario; value: number | string | boolean }[] = [
-    { label: "Reduce loan principal", param: "loanAmount", value: saferScenario.loanAmount },
-    { label: "Longer fixed-rate period", param: "introductoryPeriodMonths", value: saferScenario.introductoryPeriodMonths },
-    { label: "Larger emergency fund", param: "currentSavings", value: saferScenario.currentSavings },
+  const tests: { type: string; param: keyof FinancialScenario; value: number | string | boolean }[] = [
+    { type: "reduce_loan", param: "loanAmount", value: Math.round(scenario.loanAmount * 0.7) },
+    {
+      type: "longer_fixed",
+      param: "introductoryPeriodMonths",
+      value: Math.max(scenario.introductoryPeriodMonths, 60),
+    },
+    { type: "larger_fund", param: "currentSavings", value: Math.round(scenario.currentSavings * 1.3) },
   ];
 
   return tests
@@ -268,22 +359,59 @@ function computeSensitivityRanking(
       const modified = { ...scenario, [test.param]: test.value };
       const scoreWith = calculateRiskScore(modified).score;
       return {
-        label: test.label,
+        type: test.type,
+        param: test.param,
         scoreWith,
         reduction: originalScore - scoreWith,
-      };
+      } as SensitivityResult;
     })
     .sort((a, b) => b.reduction - a.reduction);
 }
 
+// ============================================================================
+// Safer Alternative Generation
+// ============================================================================
+
+/**
+ * Build a safer version of any scenario by applying multiple improvements:
+ * lower loan, larger fund, longer fixed period, lower hidden costs.
+ */
+function buildSaferScenario(scenario: FinancialScenario): FinancialScenario {
+  const newDownPayment = Math.round(scenario.downPayment * 1.2);
+  const newLoan = Math.round(scenario.loanAmount * 0.7);
+  const newPrice = newDownPayment + newLoan;
+  return {
+    ...scenario,
+    id: scenario.id + "-safer",
+    loanAmount: newLoan,
+    propertyPrice: newPrice,
+    downPayment: newDownPayment,
+    currentSavings: Math.round(scenario.currentSavings * 1.3),
+    introductoryPeriodMonths: scenario.isFixedRate
+      ? scenario.introductoryPeriodMonths
+      : Math.max(scenario.introductoryPeriodMonths, 60),
+    monthlyMaintenance: Math.round(scenario.monthlyMaintenance * 0.85),
+    monthlyInsurance: Math.round(scenario.monthlyInsurance * 0.8),
+    monthlyFurnishingRepair: Math.round(scenario.monthlyFurnishingRepair * 0.8),
+    monthlyManagementFees: Math.round(scenario.monthlyManagementFees * 0.8),
+  };
+}
+
+// ============================================================================
+// Full Analysis Engine — ties everything together
+// ============================================================================
+
 /**
  * Run a complete analysis on a scenario.
  * Returns the full AnalysisResult with all analysis findings, risk factors,
- * consequence events, and monthly simulation data.
+ * consequence events, escape routes, and monthly simulation data.
  */
 export function runAnalysis(scenario: FinancialScenario): AnalysisResult {
   const simulation = runMonthlySimulation(scenario);
-  const criticalTurningPoint = findCriticalTurningPoint(simulation, scenario);
+  const { month: criticalTurningPoint, hasCriticalBreak } = findCriticalTurningPoint(
+    simulation,
+    scenario,
+  );
   const consequenceEvents = generateConsequenceEvents(
     simulation,
     scenario,
@@ -295,29 +423,35 @@ export function runAnalysis(scenario: FinancialScenario): AnalysisResult {
   const m = getScenarioMetrics(scenario);
   const housingCosts = totalHousingBurden(scenario);
 
-  const primaryExplanation =
-    score >= 50
-      ? `A ${scenario.incomeDisruptionMonths}-month income disruption combined with the interest-rate reset could exhaust the household's emergency reserve.`
-      : "The scenario is manageable with the current safeguards in place.";
+  // Structured primary explanation
+  const primaryExplanation = !hasCriticalBreak
+    ? so("result.explanation.noBreak", {})
+    : score >= 50
+      ? so("result.explanation.high", { months: scenario.incomeDisruptionMonths })
+      : so("result.explanation.low", {});
 
-  // Sensitivity analysis — test each parameter change individually
-  // to show which single adjustment has the most impact on the score
+  // Sensitivity analysis
   const sensitivityRanking = computeSensitivityRanking(scenario);
+
+  // Generate escape routes via deterministic optimizer
+  const escapeRoutes = optimizeScenario(scenario);
+
+  // Safer alternative (dynamic — works for any scenario)
+  const saferScenarioObj = buildSaferScenario(scenario);
+  const saferScore = calculateRiskScore(saferScenarioObj).score;
 
   const saferAlt = {
     id: "safer-version",
-    label: "Safer Apartment Purchase",
     changes: [
-      "Reduce the loan principal",
-      "Maintain a larger emergency fund",
-      "Obtain a longer fixed-rate period",
-      "Reduce the property budget",
-      "Keep housing costs below 40% of income",
+      so("escape.change.reduce_loan", {}),
+      so("escape.change.larger_fund", {}),
+      so("escape.change.longer_fixed", {}),
+      so("escape.change.reduce_budget", {}),
+      so("escape.change.keep_below_40", {}),
     ],
-    newScenario: { ...saferScenario, monthlyIncome: scenario.monthlyIncome, monthlyLivingExpenses: scenario.monthlyLivingExpenses },
-    newScore: calculateRiskScore({ ...saferScenario, monthlyIncome: scenario.monthlyIncome, monthlyLivingExpenses: scenario.monthlyLivingExpenses }).score,
-    explanation:
-      "A lower loan principal, longer fixed-rate period, and larger emergency fund reduce the risk score significantly while keeping the home purchase achievable.",
+    newScenario: saferScenarioObj,
+    newScore: saferScore,
+    explanation: so("escape.explanation", {}),
     sensitivityRanking,
   };
 
@@ -326,11 +460,13 @@ export function runAnalysis(scenario: FinancialScenario): AnalysisResult {
     riskScore: score,
     riskLevel,
     criticalTurningPoint,
+    hasCriticalBreak,
     primaryExplanation,
     findings,
     consequenceEvents,
     riskFactors: factors,
     saferAlternative: saferAlt,
+    escapeRoutes,
     monthlySimulation: simulation,
     totalHousingBurden: Math.round(m.postResetPayment + housingCosts),
     paymentToIncomeRatio: m.paymentToIncomeRatio,
