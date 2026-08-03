@@ -13,12 +13,15 @@ import { CustomScenarioForm } from "@/components/custom-scenario-form";
 import { Disclaimer } from "@/components/disclaimer";
 import { LanguageToggle } from "@/components/language-toggle";
 
+const APP_STORAGE_KEY = "aftermath.session.v1";
+
 export default function Home() {
   // ?demo=1 — skip the intro for judges / quick demos.
   const [appState, setAppState] = useState<AppState>("intro");
   const [scenario, setScenario] = useState<FinancialScenario>(riskyScenario);
   const [presentationMode, setPresentationMode] = useState(false);
   const [showArchitecture, setShowArchitecture] = useState(false);
+  const [storageReady, setStorageReady] = useState(false);
 
   // Pre-compute the risky scenario analysis synchronously so the result
   // page is ready when needed (?demo=1 shortcut or after scenario selection).
@@ -33,6 +36,47 @@ export default function Home() {
     const timer = window.setTimeout(() => setAppState("result"), 0);
     return () => window.clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem(APP_STORAGE_KEY);
+    } catch {
+      // Storage is optional.
+    }
+    const timer = window.setTimeout(() => {
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved) as {
+            scenario?: FinancialScenario;
+            result?: AnalysisResult;
+            appState?: AppState;
+          };
+          if (parsed.scenario) setScenario(parsed.scenario);
+          if (parsed.result) setResult(parsed.result);
+          if (parsed.appState === "custom" || parsed.appState === "result") setAppState(parsed.appState);
+        } catch {
+          localStorage.removeItem(APP_STORAGE_KEY);
+        }
+      }
+      setStorageReady(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!storageReady || !result) return;
+    try {
+      localStorage.setItem(APP_STORAGE_KEY, JSON.stringify({
+        scenario,
+        result,
+        appState: appState === "result" || appState === "custom" ? appState : "intro",
+        selectedMode: scenario.isCustom ? "custom" : scenario.id,
+      }));
+    } catch {
+      // The application remains functional when storage is unavailable.
+    }
+  }, [appState, result, scenario, storageReady]);
 
   const handleEnterAnalysis = useCallback(() => {
     setAppState("analyzing");

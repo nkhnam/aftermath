@@ -19,7 +19,7 @@ export function applyStress(scenario: FinancialScenario, stress: StressTest): Fi
       break;
 
     case "income_reduction":
-      s.monthlyIncome = Math.round(scenario.monthlyIncome * (1 - stress.value / 100));
+      s.incomeReductionPercent = Math.min(100, (scenario.incomeReductionPercent ?? 0) + stress.value);
       break;
 
     case "rate_increase":
@@ -31,7 +31,8 @@ export function applyStress(scenario: FinancialScenario, stress: StressTest): Fi
       break;
 
     case "emergency_expense":
-      s.currentSavings = Math.max(0, scenario.currentSavings - stress.value);
+      s.plannedMajorExpense = (scenario.plannedMajorExpense ?? 0) + stress.value;
+      s.unexpectedEmergencyExpenseMonth = scenario.incomeDisruptionStartMonth;
       break;
 
     case "additional_debt":

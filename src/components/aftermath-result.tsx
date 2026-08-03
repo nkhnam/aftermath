@@ -31,6 +31,7 @@ import { ConsequenceTimeline } from "./consequence-timeline";
 import { ShareCard } from "./share-card";
 import { StressLab } from "./stress-lab";
 import { ExplanationPanel } from "./explanation-panel";
+import { MethodologyPanel } from "./methodology-panel";
 import { useT } from "@/lib/i18n";
 
 interface AftermathResultProps {
@@ -331,6 +332,8 @@ export function AftermathResult({
           </div>
         </div>
       </motion.section>
+
+      {!presentationMode && <MethodologyPanel result={displayResult} />}
 
       <button
         type="button"
@@ -799,7 +802,7 @@ export function AftermathResult({
             >
               <SaferScoreTransition
                 oldScore={result.riskScore}
-                newScore={saferResult?.riskScore ?? 34}
+                newScore={saferResult?.riskScore ?? result.riskScore}
               />
               <SaferComparison originalResult={result} saferResult={saferResult} />
             </motion.div>
@@ -877,7 +880,7 @@ function BeatHeader({
 }
 
 // ============================================================================
-// 81→34 Score Transition — the visual payoff
+// Dynamic score transition for an applied safer scenario.
 // ============================================================================
 
 function SaferScoreTransition({

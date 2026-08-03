@@ -3,7 +3,7 @@ import type { StructuredOutput } from "./i18n-types";
 import { calculateRiskScore } from "./scoring-engine";
 import {
   runMonthlySimulation,
-  findCriticalTurningPoint,
+  findEarliestCriticalTurningPoint,
   totalHousingBurden,
 } from "./financial-engine";
 
@@ -43,7 +43,7 @@ function evaluateScenario(scenario: FinancialScenario): {
   criticalMonth: number;
 } {
   const simulation = runMonthlySimulation(scenario);
-  const { month, hasCriticalBreak } = findCriticalTurningPoint(simulation, scenario);
+  const { month, hasCriticalBreak } = findEarliestCriticalTurningPoint(simulation, scenario);
   const { score } = calculateRiskScore(scenario);
   return { score, hasCriticalBreak, criticalMonth: month };
 }
@@ -114,6 +114,92 @@ function buildRoute(
     incrementsTested,
     isViable: viable,
   };
+}
+
+/** Calculate bounded end-points for the honest "no viable route" state. */
+function findPartialImprovements(
+  scenario: FinancialScenario,
+  originalEval: { score: number; hasCriticalBreak: boolean; criticalMonth: number },
+): EscapeRoute[] {
+  const ownership = totalHousingBurden(scenario);
+  const loanReduction = Math.min(1_000_000_000, Math.max(0, scenario.loanAmount - 1));
+  const priceReduction = Math.min(Math.round(scenario.propertyPrice * 0.3), loanReduction);
+  const fixedExtension = scenario.isFixedRate
+    ? 0
+    : Math.min(240, Math.max(0, scenario.loanTermYears * 12 - scenario.introductoryPeriodMonths));
+  const endpoints: Array<{
+    id: string;
+    next: FinancialScenario;
+    amount: number;
+    increments: number;
+    values: Record<string, string | number>;
+  }> = [
+    {
+      id: "reduce_loan",
+      next: { ...scenario, loanAmount: scenario.loanAmount - loanReduction },
+      amount: loanReduction,
+      increments: Math.min(MAX_ITERATIONS, Math.ceil(loanReduction / 50_000_000)),
+      values: { amount: loanReduction, from: scenario.loanAmount, to: scenario.loanAmount - loanReduction },
+    },
+    {
+      id: "reduce_price",
+      next: {
+        ...scenario,
+        propertyPrice: scenario.propertyPrice - priceReduction,
+        loanAmount: scenario.loanAmount - priceReduction,
+      },
+      amount: priceReduction,
+      increments: Math.min(MAX_ITERATIONS, Math.ceil(priceReduction / 100_000_000)),
+      values: { amount: priceReduction, from: scenario.propertyPrice, to: scenario.propertyPrice - priceReduction },
+    },
+    {
+      id: "increase_reserve",
+      next: { ...scenario, currentSavings: scenario.currentSavings + 1_000_000_000 },
+      amount: 1_000_000_000,
+      increments: MAX_ITERATIONS,
+      values: { amount: 1_000_000_000, from: scenario.currentSavings, to: scenario.currentSavings + 1_000_000_000 },
+    },
+    {
+      id: "extend_fixed",
+      next: { ...scenario, introductoryPeriodMonths: scenario.introductoryPeriodMonths + fixedExtension },
+      amount: fixedExtension,
+      increments: Math.min(MAX_ITERATIONS, Math.ceil(fixedExtension / 12)),
+      values: { from: scenario.introductoryPeriodMonths, to: scenario.introductoryPeriodMonths + fixedExtension, months: fixedExtension },
+    },
+    {
+      id: "reduce_ownership",
+      next: {
+        ...scenario,
+        monthlyMaintenance: 0,
+        monthlyInsurance: 0,
+        monthlyFurnishingRepair: 0,
+        monthlyManagementFees: 0,
+      },
+      amount: ownership,
+      increments: Math.min(MAX_ITERATIONS, Math.ceil(ownership / 1_000_000)),
+      values: { amount: ownership, from: ownership, to: 0 },
+    },
+  ];
+
+  return endpoints
+    .filter((candidate) => candidate.amount > 0 && candidate.increments > 0)
+    .map((candidate) => {
+      const evaluation = evaluateScenario(candidate.next);
+      return {
+        route: buildRoute(
+          candidate.id, scenario, candidate.next, originalEval.score, evaluation,
+          candidate.increments, false, candidate.values,
+        ),
+        reduction: originalEval.score - evaluation.score,
+        criticalDelay: evaluation.hasCriticalBreak
+          ? evaluation.criticalMonth - originalEval.criticalMonth
+          : Number.MAX_SAFE_INTEGER,
+      };
+    })
+    .filter((candidate) => candidate.reduction > 0 || candidate.criticalDelay > 0)
+    .sort((a, b) => b.reduction - a.reduction || b.criticalDelay - a.criticalDelay)
+    .slice(0, 2)
+    .map((candidate) => candidate.route);
 }
 
 /**
@@ -396,5 +482,5 @@ export function optimizeScenario(scenario: FinancialScenario): EscapeRoute[] {
   }
 
   // No candidates at all — strategies didn't produce any improvements
-  return [];
+  return findPartialImprovements(scenario, originalEval);
 }

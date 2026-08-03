@@ -1,329 +1,166 @@
 import type { FinancialScenario, RiskFactor } from "./types";
 import type { StructuredOutput } from "./i18n-types";
-import { totalHousingBurden, getScenarioMetrics } from "./financial-engine";
+import {
+  findEarliestCriticalTurningPoint,
+  getScenarioMetrics,
+  runMonthlySimulation,
+  totalHousingBurden,
+} from "./financial-engine";
 import { clamp, round } from "./utils";
 
-// ============================================================================
-// Transparent Scenario-Scoring Engine
-// Every score contribution is visible to the user.
-// This is NOT a machine-learning prediction.
-// It is a transparent, rules-based score on synthetic assumptions.
-//
-// All output uses STRUCTURED DATA (type + raw values) for locale-aware
-// rendering at display time.
-// ============================================================================
-
-/** Maximum score contributions per risk factor (sum = 100) */
+// Transparent 0–100 score. The six base factors sum to 100 possible points.
 export const MAX_CONTRIBUTIONS = {
-  postResetBurden: 20, // Housing burden above safe share of income
-  emergencyFundLow: 15, // Emergency fund below safe months of essential costs
-  paymentJump: 15, // Large change between intro and post-intro payment
-  loanToIncome: 10, // High loan-to-income relationship
-  hiddenCosts: 10, // Hidden housing costs relative to income
-  incomeDisruption: 18, // Income disruption consuming emergency reserves
-  noFixedRate: 12, // No long fixed-rate protection
+  postResetBurden: 25,
+  totalCommitment: 20,
+  emergencyFundLow: 20,
+  paymentJump: 15,
+  postResetCashFlow: 15,
+  loanToValue: 5,
 } as const;
 
-const TOTAL_MAX = Object.values(MAX_CONTRIBUTIONS).reduce((a, b) => a + b, 0);
-
-/**
- * Calculate all risk factors for a scenario.
- * Each factor returns structured data for locale-aware rendering.
- */
-export function calculateRiskFactors(scenario: FinancialScenario): RiskFactor[] {
-  const metrics = getScenarioMetrics(scenario);
-  const housingCosts = totalHousingBurden(scenario);
-  const factors: RiskFactor[] = [];
-
-  // 1. Post-reset housing burden (mortgage + all housing costs) vs income
-  {
-    const totalHousingRatio =
-      ((metrics.postResetPayment + housingCosts) / scenario.monthlyIncome) * 100;
-    const triggered = totalHousingRatio > 50;
-    const scale = clamp((totalHousingRatio - 35) / 30, 0, 1);
-    const contribution = round(scale * MAX_CONTRIBUTIONS.postResetBurden);
-    factors.push({
-      id: "post-reset-burden",
-      description: {
-        type: "riskfactor.post-reset-burden.desc",
-        values: { ratio: totalHousingRatio },
-      },
-      reason: {
-        type: "riskfactor.post-reset-burden.reason",
-        values: {},
-      },
-      maxContribution: MAX_CONTRIBUTIONS.postResetBurden,
-      contribution,
-      triggered,
-      evidence: {
-        type: "riskfactor.post-reset-burden.evidence",
-        values: {
-          mortgage: metrics.postResetPayment,
-          housing: housingCosts,
-          ratio: totalHousingRatio,
-          income: scenario.monthlyIncome,
-        },
-      },
-      sourceType: "verified_calc",
-      sensitivity: "high",
-    });
-  }
-
-  // 2. Emergency fund below 12 months of essential costs
-  {
-    const essentialMonthly =
-      scenario.monthlyLivingExpenses + housingCosts + metrics.postResetPayment;
-    const fundMonths = scenario.currentSavings / essentialMonthly;
-    const triggered = fundMonths < 6;
-    const scale = clamp((12 - fundMonths) / 9, 0, 1);
-    const contribution = round(scale * MAX_CONTRIBUTIONS.emergencyFundLow);
-    factors.push({
-      id: "emergency-fund-low",
-      description: {
-        type: "riskfactor.emergency-fund-low.desc",
-        values: { months: round(fundMonths, 1) },
-      },
-      reason: {
-        type: "riskfactor.emergency-fund-low.reason",
-        values: {},
-      },
-      maxContribution: MAX_CONTRIBUTIONS.emergencyFundLow,
-      contribution,
-      triggered,
-      evidence: {
-        type: "riskfactor.emergency-fund-low.evidence",
-        values: {
-          fund: scenario.currentSavings,
-          essentials: essentialMonthly,
-          months: round(fundMonths, 1),
-        },
-      },
-      sourceType: "verified_calc",
-      sensitivity: "high",
-    });
-  }
-
-  // 3. Large change between introductory and post-introductory payment
-  {
-    const jumpPct = metrics.paymentIncreasePct;
-    const triggered = jumpPct > 20;
-    const scale = clamp((jumpPct - 5) / 40, 0, 1);
-    const contribution = round(scale * MAX_CONTRIBUTIONS.paymentJump);
-    factors.push({
-      id: "payment-jump",
-      description: {
-        type: "riskfactor.payment-jump.desc",
-        values: { pct: jumpPct },
-      },
-      reason: {
-        type: "riskfactor.payment-jump.reason",
-        values: {},
-      },
-      maxContribution: MAX_CONTRIBUTIONS.paymentJump,
-      contribution,
-      triggered,
-      evidence: {
-        type: "riskfactor.payment-jump.evidence",
-        values: {
-          intro: metrics.introPayment,
-          post: metrics.postResetPayment,
-          pct: jumpPct,
-        },
-      },
-      sourceType: "verified_calc",
-      sensitivity: "medium",
-    });
-  }
-
-  // 4. High loan-to-income relationship
-  {
-    const lti = metrics.loanToIncomeRatio;
-    const triggered = lti > 4;
-    const scale = clamp((lti - 1.5) / 3.5, 0, 1);
-    const contribution = round(scale * MAX_CONTRIBUTIONS.loanToIncome);
-    factors.push({
-      id: "loan-to-income",
-      description: {
-        type: "riskfactor.loan-to-income.desc",
-        values: { ratio: lti },
-      },
-      reason: {
-        type: "riskfactor.loan-to-income.reason",
-        values: {},
-      },
-      maxContribution: MAX_CONTRIBUTIONS.loanToIncome,
-      contribution,
-      triggered,
-      evidence: {
-        type: "riskfactor.loan-to-income.evidence",
-        values: {
-          loan: scenario.loanAmount,
-          income: scenario.monthlyIncome * 12,
-          ratio: lti,
-        },
-      },
-      sourceType: "verified_calc",
-      sensitivity: "medium",
-    });
-  }
-
-  // 5. Hidden housing costs relative to income
-  {
-    const hiddenPctOfIncome = (housingCosts / scenario.monthlyIncome) * 100;
-    const triggered = hiddenPctOfIncome > 15;
-    const scale = clamp((hiddenPctOfIncome - 5) / 15, 0, 1);
-    const contribution = round(scale * MAX_CONTRIBUTIONS.hiddenCosts);
-    factors.push({
-      id: "hidden-costs",
-      description: {
-        type: "riskfactor.hidden-costs.desc",
-        values: { pct: hiddenPctOfIncome },
-      },
-      reason: {
-        type: "riskfactor.hidden-costs.reason",
-        values: {},
-      },
-      maxContribution: MAX_CONTRIBUTIONS.hiddenCosts,
-      contribution,
-      triggered,
-      evidence: {
-        type: "riskfactor.hidden-costs.evidence",
-        values: {
-          m: scenario.monthlyMaintenance,
-          i: scenario.monthlyInsurance,
-          f: scenario.monthlyFurnishingRepair,
-          mg: scenario.monthlyManagementFees,
-          pct: hiddenPctOfIncome,
-        },
-      },
-      sourceType: "verified_calc",
-      sensitivity: "low",
-    });
-  }
-
-  // 6. Income disruption consuming emergency reserves
-  {
-    const essentialMonthly =
-      scenario.monthlyLivingExpenses + housingCosts + metrics.postResetPayment;
-    const disruptionDrain = essentialMonthly * scenario.incomeDisruptionMonths;
-    const consumptionRatio = scenario.currentSavings > 0
-      ? clamp(disruptionDrain / scenario.currentSavings, 0, 1)
-      : 1;
-    const triggered = consumptionRatio > 0.4;
-    const contribution = round(
-      consumptionRatio * MAX_CONTRIBUTIONS.incomeDisruption,
-    );
-    factors.push({
-      id: "income-disruption",
-      description: {
-        type: "riskfactor.income-disruption.desc",
-        values: {
-          months: scenario.incomeDisruptionMonths,
-          pct: consumptionRatio * 100,
-        },
-      },
-      reason: {
-        type: "riskfactor.income-disruption.reason",
-        values: {},
-      },
-      maxContribution: MAX_CONTRIBUTIONS.incomeDisruption,
-      contribution,
-      triggered,
-      evidence: {
-        type: "riskfactor.income-disruption.evidence",
-        values: {
-          drain: disruptionDrain,
-          fund: scenario.currentSavings,
-          pct: consumptionRatio * 100,
-        },
-      },
-      sourceType: "stress_test",
-      sensitivity: "high",
-    });
-  }
-
-  // 7. No long fixed-rate protection
-  {
-    let scale = 0;
-    let descType = "riskfactor.no-fixed-rate.desc.fixed";
-    let evidenceType = "riskfactor.no-fixed-rate.evidence.fixed";
-    let evidenceValues: Record<string, string | number> = {};
-
-    if (scenario.isFixedRate) {
-      scale = 0;
-      descType = "riskfactor.no-fixed-rate.desc.fixed";
-      evidenceType = "riskfactor.no-fixed-rate.evidence.fixed";
-    } else if (scenario.introductoryPeriodMonths <= 12) {
-      scale = 1.0;
-      descType = "riskfactor.no-fixed-rate.desc.veryShort";
-      evidenceType = "riskfactor.no-fixed-rate.evidence.variable";
-      evidenceValues = { month: scenario.introductoryPeriodMonths + 1 };
-    } else if (scenario.introductoryPeriodMonths <= 23) {
-      scale = 0.75;
-      descType = "riskfactor.no-fixed-rate.desc.limited";
-      evidenceType = "riskfactor.no-fixed-rate.evidence.variable";
-      evidenceValues = { month: scenario.introductoryPeriodMonths + 1 };
-    } else if (scenario.introductoryPeriodMonths <= 59) {
-      scale = 0.5;
-      descType = "riskfactor.no-fixed-rate.desc.moderate";
-      evidenceType = "riskfactor.no-fixed-rate.evidence.variable";
-      evidenceValues = { month: scenario.introductoryPeriodMonths + 1 };
-    } else {
-      scale = 0.25;
-      descType = "riskfactor.no-fixed-rate.desc.longer";
-      evidenceType = "riskfactor.no-fixed-rate.evidence.variable";
-      evidenceValues = { month: scenario.introductoryPeriodMonths + 1 };
-    }
-
-    const triggered = scale > 0;
-    const contribution = round(scale * MAX_CONTRIBUTIONS.noFixedRate);
-    const descValues: Record<string, string | number> = scenario.isFixedRate
-      ? {}
-      : { months: scenario.introductoryPeriodMonths };
-
-    factors.push({
-      id: "no-fixed-rate",
-      description: { type: descType, values: descValues },
-      reason: {
-        type: "riskfactor.no-fixed-rate.reason",
-        values: {},
-      },
-      maxContribution: MAX_CONTRIBUTIONS.noFixedRate,
-      contribution,
-      triggered,
-      evidence: { type: evidenceType, values: evidenceValues },
-      sourceType: "verified_calc",
-      sensitivity: "medium",
-    });
-  }
-
-  return factors;
+function linear(value: number, safe: number, dangerous: number, max: number): number {
+  return round(clamp((value - safe) / (dangerous - safe), 0, 1) * max);
 }
 
-/**
- * Calculate the total risk score (clamped 0–100).
- */
+function inverse(value: number, safe: number, dangerous: number, max: number): number {
+  return round(clamp((safe - value) / (safe - dangerous), 0, 1) * max);
+}
+
+function factor(
+  id: string,
+  contribution: number,
+  maxContribution: number,
+  values: Record<string, string | number>,
+  sensitivity: "high" | "medium" | "low",
+): RiskFactor {
+  return {
+    id,
+    description: { type: `riskfactor.${id}.desc`, values },
+    reason: { type: `riskfactor.${id}.reason`, values: {} },
+    maxContribution,
+    contribution,
+    triggered: contribution > 0,
+    evidence: { type: `riskfactor.${id}.evidence`, values },
+    sourceType: "verified_calc",
+    sensitivity,
+  };
+}
+
+export function calculateRiskFactors(scenario: FinancialScenario): RiskFactor[] {
+  const metrics = getScenarioMetrics(scenario);
+  const ownership = totalHousingBurden(scenario);
+  const income = scenario.monthlyIncome;
+  const debt = scenario.additionalMonthlyDebt ?? 0;
+  const debtObligations =
+    metrics.postResetPayment + scenario.monthlyInsurance + scenario.monthlyManagementFees + debt;
+  const essential = metrics.postResetPayment + ownership + debt + scenario.monthlyLivingExpenses;
+  const debtToIncomeRatio = income > 0 ? (debtObligations / income) * 100 : 100;
+  const commitmentRatio = income > 0 ? (essential / income) * 100 : 100;
+  const reserveMonths = essential > 0 ? scenario.currentSavings / essential : 99;
+  const postResetSurplus = income - essential;
+  const surplusRatio = income > 0 ? (postResetSurplus / income) * 100 : -100;
+  const ltv = scenario.propertyPrice > 0 ? (scenario.loanAmount / scenario.propertyPrice) * 100 : 100;
+
+  return [
+    factor(
+      "post-reset-burden",
+      linear(debtToIncomeRatio, 36, 50, MAX_CONTRIBUTIONS.postResetBurden),
+      MAX_CONTRIBUTIONS.postResetBurden,
+      {
+        ratio: debtToIncomeRatio,
+        mortgage: metrics.postResetPayment,
+        housing: scenario.monthlyInsurance + scenario.monthlyManagementFees,
+        debt,
+        income,
+      },
+      "high",
+    ),
+    factor(
+      "total-commitment",
+      linear(commitmentRatio, 60, 90, MAX_CONTRIBUTIONS.totalCommitment),
+      MAX_CONTRIBUTIONS.totalCommitment,
+      { ratio: commitmentRatio, commitments: essential, income },
+      "high",
+    ),
+    factor(
+      "emergency-fund-low",
+      inverse(reserveMonths, 6, 1, MAX_CONTRIBUTIONS.emergencyFundLow),
+      MAX_CONTRIBUTIONS.emergencyFundLow,
+      { months: reserveMonths, fund: scenario.currentSavings, essentials: essential },
+      "high",
+    ),
+    factor(
+      "payment-jump",
+      linear(metrics.paymentIncreasePct, 10, 50, MAX_CONTRIBUTIONS.paymentJump),
+      MAX_CONTRIBUTIONS.paymentJump,
+      { pct: metrics.paymentIncreasePct, intro: metrics.introPayment, post: metrics.postResetPayment },
+      "medium",
+    ),
+    factor(
+      "post-reset-cash-flow",
+      inverse(surplusRatio, 15, 0, MAX_CONTRIBUTIONS.postResetCashFlow),
+      MAX_CONTRIBUTIONS.postResetCashFlow,
+      { surplus: postResetSurplus, ratio: surplusRatio, income },
+      "high",
+    ),
+    factor(
+      "loan-to-value",
+      linear(ltv, 70, 90, MAX_CONTRIBUTIONS.loanToValue),
+      MAX_CONTRIBUTIONS.loanToValue,
+      { ratio: ltv, loan: scenario.loanAmount, price: scenario.propertyPrice },
+      "medium",
+    ),
+  ];
+}
+
 export function calculateRiskScore(scenario: FinancialScenario): {
   score: number;
   factors: RiskFactor[];
 } {
   const factors = calculateRiskFactors(scenario);
-  const rawScore = factors.reduce((sum, f) => sum + f.contribution, 0);
-  const score = clamp(round((rawScore / TOTAL_MAX) * 100), 0, 100);
+  const baseScore = factors.reduce((sum, item) => sum + item.contribution, 0);
+  const simulation = runMonthlySimulation(scenario);
+  const critical = findEarliestCriticalTurningPoint(simulation, scenario);
+  const reserveExhausted = simulation.some((point) => point.emergencyFund <= 0);
+  const postPayment = getScenarioMetrics(scenario).postResetPayment;
+  const threeMonthThreshold = (
+    postPayment + totalHousingBurden(scenario) + scenario.monthlyLivingExpenses +
+    (scenario.additionalMonthlyDebt ?? 0)
+  ) * 3;
+  const reserveCritical = simulation.some((point) => point.emergencyFund < threeMonthThreshold);
+  let negativeStreak = 0;
+  let hasThreeMonthDeficit = false;
+  for (const point of simulation) {
+    negativeStreak = !point.isDisruption && point.monthlyCashFlow < 0
+      ? negativeStreak + 1
+      : 0;
+    if (negativeStreak >= 3) hasThreeMonthDeficit = true;
+  }
+
+  let floor = 0;
+  if (reserveExhausted) floor = 80;
+  else if (reserveCritical) floor = 65;
+  else if (hasThreeMonthDeficit || critical.reason === "unsustainable_burden") floor = 60;
+  const score = clamp(Math.max(baseScore, floor), 0, 100);
+  if (score > baseScore) {
+    factors.push(factor(
+      "simulation-floor",
+      score - baseScore,
+      100,
+      { base: baseScore, floor, score },
+      "high",
+    ));
+  }
   return { score, factors };
 }
 
-/**
- * Determine risk level from score.
- */
 export function getRiskLevel(score: number): "low" | "moderate" | "high" | "critical" {
-  if (score >= 70) return "critical";
-  if (score >= 50) return "high";
-  if (score >= 30) return "moderate";
+  if (score >= 75) return "critical";
+  if (score >= 55) return "high";
+  if (score >= 35) return "moderate";
   return "low";
 }
 
-/** Helper: build a StructuredOutput */
 export function so(type: string, values: Record<string, string | number> = {}): StructuredOutput {
   return { type, values };
 }

@@ -55,6 +55,9 @@ export function buildExplanationContext(
     paymentIncreasePct: result.paymentIncreasePct,
     paymentToIncomeRatio: result.paymentToIncomeRatio,
     totalHousingBurden: result.totalHousingBurden,
+    totalHousingBurdenRatio: result.scenario.monthlyIncome > 0
+      ? (result.totalHousingBurden / result.scenario.monthlyIncome) * 100
+      : 0,
     emergencyFundRunwayMonths: result.emergencyFundRunwayMonths,
   };
 

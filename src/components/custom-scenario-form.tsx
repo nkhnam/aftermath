@@ -1,12 +1,11 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, ArrowRight, ChevronRight } from "lucide-react";
 import type { FinancialScenario, CustomScenarioForm as FormState, ValidationError } from "@/lib/types";
 import { getDefaultForm, personas, formToScenario } from "@/lib/scenarios";
-import { calculateMonthlyPayment, remainingBalance } from "@/lib/financial-engine";
-import { round } from "@/lib/utils";
+import { getScenarioMetrics, totalHousingBurden } from "@/lib/financial-engine";
 import { formatCurrencyShort, formatDecimal, formatMonthsDuration } from "@/lib/formatters";
 import { useT } from "@/lib/i18n";
 
@@ -22,6 +21,7 @@ const SECTIONS = [
   "safetyBuffer",
   "stressTest",
 ] as const;
+const FORM_STORAGE_KEY = "aftermath.custom-scenario.v1";
 
 export function CustomScenarioForm({ onBack, onAnalyze }: CustomScenarioFormProps) {
   const { t, lang } = useT();
@@ -30,11 +30,37 @@ export function CustomScenarioForm({ onBack, onAnalyze }: CustomScenarioFormProp
   const [loanManual, setLoanManual] = useState(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
 
+  useEffect(() => {
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem(FORM_STORAGE_KEY);
+    } catch {
+      // Invalid or unavailable browser storage does not block the form.
+    }
+    if (!saved) return;
+    const timer = window.setTimeout(() => {
+      try {
+        setForm({ ...getDefaultForm(), ...JSON.parse(saved) });
+      } catch {
+        localStorage.removeItem(FORM_STORAGE_KEY);
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   // Auto-calculate loan amount from price - down payment
   const effectiveForm = useMemo(() => {
     if (loanManual) return form;
     return { ...form, loanAmount: Math.max(0, form.propertyPrice - form.downPayment) };
   }, [form, loanManual]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(FORM_STORAGE_KEY, JSON.stringify(effectiveForm));
+    } catch {
+      // Persistence is optional; calculations remain local and functional.
+    }
+  }, [effectiveForm]);
 
   // Validation
   const errors = useMemo(() => validateForm(effectiveForm), [effectiveForm]);
@@ -128,6 +154,22 @@ export function CustomScenarioForm({ onBack, onAnalyze }: CustomScenarioFormProp
         <p className="mt-1 text-sm text-[var(--text-secondary)]">
           {t("custom.subtitle")}
         </p>
+        <div className="mt-3 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              localStorage.removeItem(FORM_STORAGE_KEY);
+              setForm(getDefaultForm());
+              setTouched({});
+              setStep(0);
+              setLoanManual(false);
+            }}
+            className="text-xs text-[var(--accent-red)] hover:underline"
+          >
+            {t("custom.clearScenario")}
+          </button>
+          <span className="text-[10px] text-[var(--text-muted)]">{t("custom.localOnly")}</span>
+        </div>
       </div>
 
       {/* Persona selector */}
@@ -300,6 +342,10 @@ export function CustomScenarioForm({ onBack, onAnalyze }: CustomScenarioFormProp
 
             <div className="space-y-3">
               <PreviewItem
+                label={t("preview.loanAmount")}
+                value={formatCurrencyShort(effectiveForm.loanAmount, lang)}
+              />
+              <PreviewItem
                 label={t("preview.introPayment")}
                 value={formatCurrencyShort(preview.introPayment, lang)}
               />
@@ -326,6 +372,14 @@ export function CustomScenarioForm({ onBack, onAnalyze }: CustomScenarioFormProp
                 label={t("preview.mortgageIncomeRatio")}
                 value={`${formatDecimal(preview.mortgageIncomeRatio, lang, 0)}%`}
                 valueColor={preview.mortgageIncomeRatio > 40 ? "var(--accent-red)" : "var(--text-secondary)"}
+              />
+              <PreviewItem
+                label={t("preview.postMortgageIncomeRatio")}
+                value={`${formatDecimal(preview.postMortgageIncomeRatio, lang, 0)}%`}
+              />
+              <PreviewItem
+                label={t("preview.paymentIncrease")}
+                value={`${formatDecimal(preview.paymentIncreasePct, lang, 0)}%`}
               />
             </div>
           </div>
@@ -631,6 +685,15 @@ function StressTestSection({
           <span className="text-xs text-[var(--text-muted)]">{t("form.months")}</span>
         </div>
       </FormField>
+      <FormField label={t("form.incomeDisruptionStartMonth")} error={getFieldError("incomeDisruptionStartMonth")}>
+        <NumberInput value={form.incomeDisruptionStartMonth} onChange={(v) => updateField("incomeDisruptionStartMonth", v)} lang={lang} />
+      </FormField>
+      <FormField label={t("form.incomeReductionPercent")} error={getFieldError("incomeReductionPercent")}>
+        <NumberInput value={form.incomeReductionPercent} onChange={(v) => updateField("incomeReductionPercent", v)} suffix="%" step={1} lang={lang} />
+      </FormField>
+      <FormField label={t("form.unexpectedEmergencyExpense")} error={getFieldError("unexpectedEmergencyExpense")}>
+        <NumberInput value={form.unexpectedEmergencyExpense} onChange={(v) => updateField("unexpectedEmergencyExpense", v)} suffix="₫" lang={lang} />
+      </FormField>
     </>
   );
 }
@@ -746,7 +809,7 @@ function getSectionFields(section: string): string[] {
     case "safetyBuffer":
       return ["additionalMonthlyDebt", "dependants", "scenarioNote"];
     case "stressTest":
-      return ["incomeDisruptionMonths"];
+      return ["incomeDisruptionMonths", "incomeDisruptionStartMonth", "incomeReductionPercent", "unexpectedEmergencyExpense"];
     default:
       return [];
   }
@@ -754,6 +817,19 @@ function getSectionFields(section: string): string[] {
 
 function validateForm(form: FormState): ValidationError[] {
   const errors: ValidationError[] = [];
+
+  if (form.propertyPrice <= 0) {
+    errors.push({ field: "propertyPrice", errorType: "propertyPricePositive" });
+  }
+  if (form.downPayment < 0 || form.downPayment >= form.propertyPrice) {
+    errors.push({ field: "downPayment", errorType: "downPaymentRange" });
+  }
+  if (form.loanAmount <= 0) {
+    errors.push({ field: "loanAmount", errorType: "loanAmountPositive" });
+  }
+  if (form.loanTermYears < 1 || form.loanTermYears > 40) {
+    errors.push({ field: "loanTermYears", errorType: "loanTermRange" });
+  }
 
   if (form.downPayment > form.propertyPrice) {
     errors.push({ field: "downPayment", errorType: "downPaymentExceedsPrice" });
@@ -773,10 +849,10 @@ function validateForm(form: FormState): ValidationError[] {
   if (form.postIntroductoryRate < 0) {
     errors.push({ field: "postIntroductoryRate", errorType: "rateNegative" });
   }
-  if (form.introductoryRate > 50) {
+  if (form.introductoryRate > 40) {
     errors.push({ field: "introductoryRate", errorType: "rateExceedsMax" });
   }
-  if (form.postIntroductoryRate > 50) {
+  if (form.postIntroductoryRate > 40) {
     errors.push({ field: "postIntroductoryRate", errorType: "rateExceedsMax" });
   }
   if (!form.isFixedRate && form.introductoryPeriodMonths > form.loanTermYears * 12) {
@@ -794,40 +870,38 @@ function validateForm(form: FormState): ValidationError[] {
   if (form.incomeDisruptionMonths < 0 || form.incomeDisruptionMonths > 24) {
     errors.push({ field: "incomeDisruptionMonths", errorType: "stressDurationRange" });
   }
+  const horizon = Math.min(form.loanTermYears * 12, 480);
+  if (form.incomeDisruptionStartMonth < 1 || form.incomeDisruptionStartMonth > horizon) {
+    errors.push({ field: "incomeDisruptionStartMonth", errorType: "stressStartRange" });
+  }
+  if (form.incomeDisruptionStartMonth + form.incomeDisruptionMonths - 1 > horizon) {
+    errors.push({ field: "incomeDisruptionMonths", errorType: "stressExceedsHorizon" });
+  }
+  if (form.incomeReductionPercent < 0 || form.incomeReductionPercent > 100) {
+    errors.push({ field: "incomeReductionPercent", errorType: "incomeReductionRange" });
+  }
+  if (form.unexpectedEmergencyExpense < 0) {
+    errors.push({ field: "unexpectedEmergencyExpense", errorType: "unexpectedExpenseNegative" });
+  }
 
   return errors;
 }
 
 function computePreview(form: FormState) {
-  const totalMonths = form.loanTermYears * 12;
-  const introRate = form.introductoryRate / 100;
-  const postRate = form.isFixedRate ? introRate : form.postIntroductoryRate / 100;
-
-  const introPayment = calculateMonthlyPayment(form.loanAmount, introRate, totalMonths);
-
-  const introMonths = form.isFixedRate ? totalMonths : form.introductoryPeriodMonths;
-  const balanceAfterIntro = form.isFixedRate
-    ? form.loanAmount
-    : remainingBalance(form.loanAmount, introRate, totalMonths, introMonths, introPayment);
-
-  const postResetPayment = form.isFixedRate
-    ? introPayment
-    : calculateMonthlyPayment(balanceAfterIntro, postRate, totalMonths - introMonths);
-
-  const additionalDebt = form.additionalMonthlyDebt || 0;
-  const housingCosts = form.monthlyOwnershipCosts;
-  const totalHousing = (form.isFixedRate ? introPayment : postResetPayment) + housingCosts + additionalDebt;
-  const remainingCash = form.monthlyIncome - totalHousing - form.monthlyLivingExpenses;
-  const monthlyNeed = form.monthlyLivingExpenses + housingCosts + postResetPayment + additionalDebt;
-  const emergencyRunway = monthlyNeed > 0 ? form.currentSavings / monthlyNeed : 0;
-  const mortgageIncomeRatio = form.monthlyIncome > 0 ? (introPayment / form.monthlyIncome) * 100 : 0;
+  const scenario = formToScenario(form);
+  const metrics = getScenarioMetrics(scenario);
+  const ownership = totalHousingBurden(scenario);
+  const totalHousing = metrics.postResetPayment + ownership + (scenario.additionalMonthlyDebt ?? 0);
+  const remainingCash = scenario.monthlyIncome - totalHousing - scenario.monthlyLivingExpenses;
 
   return {
-    introPayment: round(introPayment),
-    postResetPayment: round(postResetPayment),
-    totalHousing: round(totalHousing),
-    remainingCash: round(remainingCash),
-    emergencyRunway: round(emergencyRunway, 1),
-    mortgageIncomeRatio: round(mortgageIncomeRatio, 1),
+    introPayment: metrics.introPayment,
+    postResetPayment: metrics.postResetPayment,
+    totalHousing,
+    remainingCash,
+    emergencyRunway: metrics.emergencyRunway,
+    mortgageIncomeRatio: scenario.monthlyIncome > 0 ? (metrics.introPayment / scenario.monthlyIncome) * 100 : 0,
+    postMortgageIncomeRatio: metrics.paymentToIncomeRatio,
+    paymentIncreasePct: metrics.paymentIncreasePct,
   };
 }

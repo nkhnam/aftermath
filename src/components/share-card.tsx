@@ -54,7 +54,7 @@ export function ShareCard({ result, onClose }: ShareCardProps) {
       "",
       `"${scenarioLabel}"`,
       `${t("share.copy.riskScore")}: ${result.riskScore}/100 (${riskLabel})`,
-      `${t("share.copy.breakingPoint")}: ${t("timeline.month")} ${result.criticalTurningPoint}`,
+      `${t("share.copy.breakingPoint")}: ${result.hasCriticalBreak ? `${t("timeline.month")} ${result.criticalTurningPoint}` : t("result.noCriticalBreak")}`,
       "",
       t("share.copy.question"),
       "",
@@ -223,7 +223,7 @@ function SocialCardContent({
   const turningPoint = (
     <div className="rounded-lg bg-[var(--bg-elevated)] px-3 py-1.5">
       <span className="text-[10px] text-[var(--text-muted)]">{t("share.breakingPoint")}</span>
-      <p className="text-sm font-bold tabular-nums">{t("timeline.month")} {result.criticalTurningPoint}</p>
+      <p className="text-sm font-bold tabular-nums">{result.hasCriticalBreak ? `${t("timeline.month")} ${result.criticalTurningPoint}` : t("result.noCriticalBreak")}</p>
     </div>
   );
 
@@ -368,6 +368,7 @@ function generateSVG(
   const { width: w, height: h } = variant;
   const score = result.riskScore;
   const tp = result.criticalTurningPoint;
+  const tpText = result.hasCriticalBreak ? `${monthLabel} ${tp}` : breakingPointLabel;
 
   const brandY = 28;
   const scoreY = variant.id === "16:9" ? h * 0.5 : h * 0.4;
@@ -392,7 +393,7 @@ function generateSVG(
   <text x="${w / 2}" y="${scoreY + 40}" text-anchor="middle" font-family="Arial" font-size="11" fill="#8b94a8">${esc(scenarioLabel)}</text>
 
   <!-- Turning point -->
-  <text x="${w / 2}" y="${h - 50}" text-anchor="middle" font-family="Arial" font-size="11" font-weight="600" fill="#f5f3ef">${esc(breakingPointLabel)}: ${esc(monthLabel)} ${tp}</text>
+  <text x="${w / 2}" y="${h - 50}" text-anchor="middle" font-family="Arial" font-size="11" font-weight="600" fill="#f5f3ef">${esc(breakingPointLabel)}: ${esc(tpText)}</text>
 
   <!-- Footer -->
   <text x="${w / 2}" y="${h - 24}" text-anchor="middle" font-family="Arial" font-size="8" fill="#5a6378">${esc(notAdviceLabel)}</text>

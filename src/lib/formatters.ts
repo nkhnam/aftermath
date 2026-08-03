@@ -4,8 +4,8 @@ import type { Lang } from "./i18n-types";
 // AfterMath — Locale-Aware Formatters
 // Centralized formatting for currency, percentages, numbers, months, etc.
 // Vietnamese and English formatting follows the spec:
-//   vi: "3,2 tỷ đồng", "48 triệu đồng/tháng", "6,8%", "tháng thứ 19"
-//   en: "VND 3.2 billion", "VND 48 million/month", "6.8%", "Month 19"
+//   vi: "3,2 tỷ đồng", "48 triệu đồng/tháng", "6,8%", "tháng thứ N"
+//   en: "VND 3.2 billion", "VND 48 million/month", "6.8%", "Month N"
 // ============================================================================
 
 /** Locale string for Intl APIs */
@@ -114,7 +114,7 @@ export function formatMultiplier(value: number, lang: Lang): string {
   return `${formatDecimal(value, lang)}×`;
 }
 
-/** Format a month reference: en "Month 19", vi "tháng thứ 19" */
+/** Format a calculated month reference in the active locale. */
 export function formatMonthRef(month: number, lang: Lang): string {
   return lang === "vi" ? `tháng thứ ${month}` : `Month ${month}`;
 }

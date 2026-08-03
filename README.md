@@ -1,36 +1,34 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AfterMath
 
-## Getting Started
+AfterMath is a bilingual Vietnamese/English financial pre-mortem simulator. Its deterministic TypeScript engine is the only source of truth for calculations, risk scoring, timelines, stress tests, and escape-route optimization.
 
-First, run the development server:
+## Local development
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000`. Quality gates:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm test
+npm run lint
+npm run build
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Optional Qwen 3.7 Plus explanation layer
 
-## Learn More
+The server-side provider uses Alibaba Cloud model `qwen3.7-plus`. Qwen only converts verified structured results into concise prose. It does not calculate scores, choose critical months, or select optimizer routes. The application automatically uses the localized deterministic provider when the API key is absent, the request times out, the provider fails, or output does not pass schema validation.
 
-To learn more about Next.js, take a look at the following resources:
+Copy `.env.example` to `.env.local` and set the server-only variable if Qwen enhancement is desired:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```dotenv
+DASHSCOPE_API_KEY=your_server_side_key
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Never prefix this variable with `NEXT_PUBLIC_`. The key is read only by `src/app/api/explain/route.ts` and must be configured as a server-side environment variable on the deployment platform. The browser sends only sanitized financial scenario values and calculated results; scenario names and personal notes are excluded.
 
-## Deploy on Vercel
+## Deployment
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Deploy to a platform that supports Next.js App Router Route Handlers. Configure `DASHSCOPE_API_KEY` in the platform's encrypted server-side environment settings, then run `npm run build`. The product remains fully functional without this variable and does not automatically call Qwen during the cinematic flow.

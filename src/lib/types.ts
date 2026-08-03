@@ -58,6 +58,9 @@ export interface FinancialScenario {
   incomeGrowthRate?: number;
   /** Optional: planned major expense (one-time) */
   plannedMajorExpense?: number;
+  unexpectedEmergencyExpenseMonth?: number;
+  incomeReductionPercent?: number;
+  simulationHorizonMonths?: number;
   /** Optional: personal scenario note */
   scenarioNote?: string;
   /** Whether this is a custom (user-provided) scenario */
@@ -174,6 +177,8 @@ export interface MonthlySimulation {
   isRateReset: boolean;
   isDisruption: boolean;
   paymentToIncomeRatio: number;
+  oneTimeExpenses: number;
+  activeEvents: string[];
 }
 
 /** The complete analysis result */
@@ -194,7 +199,14 @@ export interface AnalysisResult {
   escapeRoutes: EscapeRoute[];
   monthlySimulation: MonthlySimulation[];
   totalHousingBurden: number;
+  /** Mortgage payment only, divided by monthly income. */
   paymentToIncomeRatio: number;
+  /** Mortgage plus recurring ownership costs, divided by monthly income. */
+  housingToIncomeRatio: number;
+  /** Mortgage, recurring insurance/management fees, and other debt divided by income. */
+  debtToIncomeRatio: number;
+  /** DTI obligations plus living expenses, divided by monthly income. */
+  cashCommitmentRatio: number;
   introMonthlyPayment: number;
   postResetMonthlyPayment: number;
   paymentIncreasePct: number;
@@ -237,6 +249,9 @@ export interface CustomScenarioForm {
   /** Combined ownership & maintenance costs */
   monthlyOwnershipCosts: number;
   incomeDisruptionMonths: number;
+  incomeDisruptionStartMonth: number;
+  incomeReductionPercent: number;
+  unexpectedEmergencyExpense: number;
   isFixedRate: boolean;
   // Optional fields
   additionalMonthlyDebt: number;

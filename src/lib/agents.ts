@@ -9,11 +9,12 @@ import {
   getScenarioMetrics,
   totalHousingBurden,
   runMonthlySimulation,
-  findCriticalTurningPoint,
+  findEarliestCriticalTurningPoint,
   generateConsequenceEvents,
 } from "./financial-engine";
 import { calculateRiskScore, getRiskLevel, so } from "./scoring-engine";
 import { optimizeScenario } from "./optimizer";
+import { generateSaferAlternative } from "./scenarios";
 
 // ============================================================================
 // AfterMath — Analysis Module Definitions
@@ -376,27 +377,6 @@ function computeSensitivityRanking(
  * Build a safer version of any scenario by applying multiple improvements:
  * lower loan, larger fund, longer fixed period, lower hidden costs.
  */
-function buildSaferScenario(scenario: FinancialScenario): FinancialScenario {
-  const newDownPayment = Math.round(scenario.downPayment * 1.2);
-  const newLoan = Math.round(scenario.loanAmount * 0.7);
-  const newPrice = newDownPayment + newLoan;
-  return {
-    ...scenario,
-    id: scenario.id + "-safer",
-    loanAmount: newLoan,
-    propertyPrice: newPrice,
-    downPayment: newDownPayment,
-    currentSavings: Math.round(scenario.currentSavings * 1.3),
-    introductoryPeriodMonths: scenario.isFixedRate
-      ? scenario.introductoryPeriodMonths
-      : Math.max(scenario.introductoryPeriodMonths, 60),
-    monthlyMaintenance: Math.round(scenario.monthlyMaintenance * 0.85),
-    monthlyInsurance: Math.round(scenario.monthlyInsurance * 0.8),
-    monthlyFurnishingRepair: Math.round(scenario.monthlyFurnishingRepair * 0.8),
-    monthlyManagementFees: Math.round(scenario.monthlyManagementFees * 0.8),
-  };
-}
-
 // ============================================================================
 // Full Analysis Engine — ties everything together
 // ============================================================================
@@ -408,7 +388,7 @@ function buildSaferScenario(scenario: FinancialScenario): FinancialScenario {
  */
 export function runAnalysis(scenario: FinancialScenario): AnalysisResult {
   const simulation = runMonthlySimulation(scenario);
-  const { month: criticalTurningPoint, hasCriticalBreak } = findCriticalTurningPoint(
+  const { month: criticalTurningPoint, hasCriticalBreak } = findEarliestCriticalTurningPoint(
     simulation,
     scenario,
   );
@@ -437,7 +417,7 @@ export function runAnalysis(scenario: FinancialScenario): AnalysisResult {
   const escapeRoutes = optimizeScenario(scenario);
 
   // Safer alternative (dynamic — works for any scenario)
-  const saferScenarioObj = buildSaferScenario(scenario);
+  const saferScenarioObj = generateSaferAlternative(scenario);
   const saferScore = calculateRiskScore(saferScenarioObj).score;
 
   const saferAlt = {
@@ -470,6 +450,9 @@ export function runAnalysis(scenario: FinancialScenario): AnalysisResult {
     monthlySimulation: simulation,
     totalHousingBurden: Math.round(m.postResetPayment + housingCosts),
     paymentToIncomeRatio: m.paymentToIncomeRatio,
+    housingToIncomeRatio: m.housingToIncomeRatio,
+    debtToIncomeRatio: m.debtToIncomeRatio,
+    cashCommitmentRatio: m.cashCommitmentRatio,
     introMonthlyPayment: m.introPayment,
     postResetMonthlyPayment: m.postResetPayment,
     paymentIncreasePct: m.paymentIncreasePct,

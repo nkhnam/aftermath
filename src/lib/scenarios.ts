@@ -5,7 +5,7 @@ import type { FinancialScenario, CustomScenarioForm, Persona } from "./types";
 // All data is synthetic. Not real financial data.
 // ============================================================================
 
-/** Preset 1: Risky apartment purchase — expected score ~81 */
+/** Preset 1: Risky apartment purchase. */
 export const riskyScenario: FinancialScenario = {
   id: "risky-apartment",
   labelKey: "intro.riskyApt",
@@ -29,7 +29,7 @@ export const riskyScenario: FinancialScenario = {
   dataType: "synthetic",
 };
 
-/** Preset 2: Safer apartment purchase — expected score ~34 */
+/** Preset 2: Safer apartment purchase. */
 export const saferScenario: FinancialScenario = {
   id: "safer-apartment",
   labelKey: "intro.saferApt",
@@ -40,14 +40,14 @@ export const saferScenario: FinancialScenario = {
   introductoryRate: 0.075,
   postIntroductoryRate: 0.095,
   introductoryPeriodMonths: 60,
-  monthlyIncome: 48_000_000,
+  monthlyIncome: 70_000_000,
   currentSavings: 400_000_000,
   monthlyLivingExpenses: 21_000_000,
   monthlyMaintenance: 3_500_000,
   monthlyInsurance: 1_200_000,
   monthlyFurnishingRepair: 1_200_000,
   monthlyManagementFees: 800_000,
-  incomeDisruptionMonths: 3,
+  incomeDisruptionMonths: 0,
   incomeDisruptionStartMonth: 66,
   isFixedRate: false,
   dataType: "synthetic",
@@ -102,6 +102,9 @@ export function getDefaultForm(): CustomScenarioForm {
     monthlyLivingExpenses: 20_000_000,
     monthlyOwnershipCosts: 6_000_000,
     incomeDisruptionMonths: 3,
+    incomeDisruptionStartMonth: 28,
+    incomeReductionPercent: 0,
+    unexpectedEmergencyExpense: 0,
     isFixedRate: false,
     additionalMonthlyDebt: 0,
     dependants: 0,
@@ -183,13 +186,10 @@ export const personas: Persona[] = [
  */
 export function formToScenario(form: CustomScenarioForm): FinancialScenario {
   const totalMonths = form.loanTermYears * 12;
-  const introMonths = form.isFixedRate ? totalMonths : form.introductoryPeriodMonths;
 
-  // Derive disruption start: a few months after intro period ends,
-  // but ensure it fits within the loan term
   const disruptionStart = Math.min(
-    introMonths + 4,
-    Math.max(1, totalMonths - form.incomeDisruptionMonths - 1),
+    Math.max(1, form.incomeDisruptionStartMonth),
+    Math.max(1, totalMonths - form.incomeDisruptionMonths + 1),
   );
 
   // Split combined ownership costs into approximate components
@@ -217,6 +217,10 @@ export function formToScenario(form: CustomScenarioForm): FinancialScenario {
     monthlyManagementFees: management,
     incomeDisruptionMonths: form.incomeDisruptionMonths,
     incomeDisruptionStartMonth: disruptionStart,
+    incomeReductionPercent: form.incomeReductionPercent,
+    plannedMajorExpense: form.unexpectedEmergencyExpense,
+    unexpectedEmergencyExpenseMonth: disruptionStart,
+    simulationHorizonMonths: Math.min(totalMonths, 480),
     isFixedRate: form.isFixedRate,
     dataType: "synthetic",
     additionalMonthlyDebt: form.additionalMonthlyDebt || undefined,

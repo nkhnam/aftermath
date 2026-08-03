@@ -80,9 +80,9 @@ export function generateDeterministicExplanation(
       resetMonth: scenario.introductoryPeriodMonths + 1,
       criticalMonth: metrics.criticalTurningPoint,
     }, lang);
-  } else if (metrics.totalHousingBurden > 50) {
+  } else if (metrics.totalHousingBurdenRatio > 50) {
     summary = tr("explain.det.summary.burden", {
-      ratio: metrics.totalHousingBurden,
+      ratio: metrics.totalHousingBurdenRatio,
     }, lang);
   } else {
     summary = tr("explain.det.summary.nocritical", {
@@ -117,7 +117,7 @@ export function generateDeterministicExplanation(
     const params: Record<string, string | number> = {};
     switch (factor.id) {
       case "post-reset-burden":
-        params.ratio = metrics.totalHousingBurden;
+        params.ratio = metrics.totalHousingBurdenRatio;
         break;
       case "emergency-fund-low":
         params.months = Math.round(metrics.emergencyFundRunwayMonths);
@@ -133,7 +133,7 @@ export function generateDeterministicExplanation(
       }
       case "hidden-costs":
         params.ratio = Math.round(
-          metrics.totalHousingBurden - metrics.paymentToIncomeRatio,
+          metrics.totalHousingBurdenRatio - metrics.paymentToIncomeRatio,
         );
         break;
       case "income-disruption":

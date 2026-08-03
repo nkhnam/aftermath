@@ -5,6 +5,9 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ArrowRight, Check, ChevronRight, ShieldAlert, Sparkles } from "lucide-react";
 import type { FinancialScenario } from "@/lib/types";
 import { riskyScenario, saferScenario } from "@/lib/scenarios";
+import { calculateRiskScore } from "@/lib/scoring-engine";
+import { findEarliestCriticalTurningPoint, runMonthlySimulation } from "@/lib/financial-engine";
+import { formatMonthRef } from "@/lib/formatters";
 import { useT } from "@/lib/i18n";
 
 interface CinematicIntroProps {
@@ -24,7 +27,7 @@ export function CinematicIntro({
   onSelectCustom,
   onDemoResult,
 }: CinematicIntroProps) {
-  const { t } = useT();
+  const { t, lang } = useT();
   const [step, setStep] = useState(-1);
   const [selectedPreset, setSelectedPreset] = useState<PresetId>(
     scenario.id === saferScenario.id ? "safer" : "risky",
@@ -40,6 +43,17 @@ export function CinematicIntro({
   );
 
   const selectedScenario = selectedPreset === "risky" ? riskyScenario : saferScenario;
+  const summaries = useMemo(() => {
+    const summarize = (preset: FinancialScenario) => {
+      const simulation = runMonthlySimulation(preset);
+      return {
+        score: calculateRiskScore(preset).score,
+        critical: findEarliestCriticalTurningPoint(simulation, preset),
+      };
+    };
+    return { risky: summarize(riskyScenario), safer: summarize(saferScenario) };
+  }, []);
+  const selectedSummary = summaries[selectedPreset];
   const isSetup = step < 0;
 
   const enterAnalysis = useCallback(() => {
@@ -164,8 +178,8 @@ export function CinematicIntro({
                 <div className="relative grid grid-cols-3 gap-3">
                   <div className="absolute left-[10%] right-[10%] top-2 h-px bg-gradient-to-r from-[var(--accent-green)] via-[var(--accent-amber)] to-[var(--accent-red)]" />
                   <TimelinePoint color="var(--accent-green)" label={t("intro.today")} value={t("intro.looksAffordable")} />
-                  <TimelinePoint color="var(--accent-amber)" label={t("intro.month13")} value={t("intro.rateReset")} />
-                  <TimelinePoint color="var(--accent-red)" label={t("intro.month19")} value={t("intro.breakingPoint")} />
+                  <TimelinePoint color="var(--accent-amber)" label={formatMonthRef(selectedScenario.introductoryPeriodMonths + 1, lang)} value={t("intro.rateReset")} />
+                  <TimelinePoint color="var(--accent-red)" label={selectedSummary.critical.hasCriticalBreak ? formatMonthRef(selectedSummary.critical.month, lang) : t("result.noCriticalBreak")} value={t("intro.breakingPoint")} />
                 </div>
               </motion.div>
             </section>
@@ -195,7 +209,7 @@ export function CinematicIntro({
                   badge={t("intro.highRisk")}
                   title={t("intro.riskyApt")}
                   description={t("intro.riskyDesc")}
-                  score={t("intro.riskyScore")}
+                  score={`${summaries.risky.score}/100`}
                 />
                 <PresetCard
                   selected={selectedPreset === "safer"}
@@ -204,7 +218,7 @@ export function CinematicIntro({
                   badge={t("intro.lowerRisk")}
                   title={t("intro.saferApt")}
                   description={t("intro.saferDesc")}
-                  score={t("intro.saferScore")}
+                  score={`${summaries.safer.score}/100`}
                 />
               </div>
 
@@ -216,7 +230,7 @@ export function CinematicIntro({
                 <span>
                   {t("intro.revealAftermath")}
                   <span className="ml-2 font-mono text-[10px] font-normal opacity-55">
-                    {selectedPreset === "risky" ? "≈81/100" : "≈34/100"}
+                    {selectedSummary.score}/100
                   </span>
                 </span>
                 <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" aria-hidden="true" />

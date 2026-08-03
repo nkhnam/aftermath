@@ -1,4 +1,5 @@
 import { generateDeterministicExplanation } from "@/lib/deterministic-explanation";
+import { validateExplanation } from "@/lib/explanation-validation";
 import type {
   ExplanationContext,
   ExplanationResult,
@@ -20,7 +21,7 @@ import type {
 
 const QWEN_API_URL =
   "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
-const QWEN_MODEL = "qwen-plus";
+const QWEN_MODEL = "qwen3.7-plus";
 const TIMEOUT_MS = 10_000;
 const MAX_RETRIES = 1;
 
@@ -56,36 +57,6 @@ Return a JSON object with exactly these fields:
 }
 
 Return ONLY the JSON object. No markdown, no code blocks, no additional text.`;
-}
-
-// ── Response validation (manual schema validation, no Zod dependency) ──
-
-function validateExplanation(data: unknown): data is ExplanationResult {
-  if (typeof data !== "object" || data === null) return false;
-  const obj = data as Record<string, unknown>;
-
-  // Required string fields
-  const stringFields = [
-    "headline",
-    "summary",
-    "criticalTurningPointExplanation",
-    "disclaimer",
-  ];
-  for (const field of stringFields) {
-    if (typeof obj[field] !== "string" || (obj[field] as string).length === 0) {
-      return false;
-    }
-  }
-
-  // Required array fields
-  const arrayFields = ["topInsights", "recommendedActions"];
-  for (const field of arrayFields) {
-    if (!Array.isArray(obj[field])) return false;
-    if (obj[field].length === 0) return false;
-    if (!obj[field].every((item) => typeof item === "string")) return false;
-  }
-
-  return true;
 }
 
 // ── Qwen API call with timeout ──

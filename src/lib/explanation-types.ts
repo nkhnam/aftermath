@@ -58,6 +58,7 @@ export interface CalculatedMetrics {
   paymentIncreasePct: number;
   paymentToIncomeRatio: number;
   totalHousingBurden: number;
+  totalHousingBurdenRatio: number;
   emergencyFundRunwayMonths: number;
 }
 

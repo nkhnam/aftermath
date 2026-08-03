@@ -7,6 +7,7 @@ import type { AnalysisResult, EscapeRoute } from "@/lib/types";
 import type { ExplanationResult, ExplanationSource } from "@/lib/explanation-types";
 import { buildExplanationContext, explanationCacheHash } from "@/lib/explanation-context";
 import { generateDeterministicExplanation } from "@/lib/deterministic-explanation";
+import { validateExplanation } from "@/lib/explanation-validation";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -66,6 +67,9 @@ export function ExplanationPanel({ result, appliedRoute }: ExplanationPanelProps
       const data = await response.json();
       const explanation: ExplanationResult = data.explanation;
       const source: ExplanationSource = data.source;
+      if (!validateExplanation(explanation) || (source !== "qwen" && source !== "deterministic")) {
+        throw new Error("Invalid explanation response");
+      }
 
       // Cache the result
       explanationCache.set(hash, { explanation, source });

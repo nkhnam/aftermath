@@ -29,6 +29,8 @@ export function calculateMonthlyPayment(
   annualRate: number,
   termMonths: number,
 ): number {
+  if (!Number.isFinite(loanAmount) || !Number.isFinite(annualRate) || !Number.isFinite(termMonths)) return 0;
+  if (loanAmount <= 0 || annualRate < 0 || termMonths <= 0) return 0;
   const r = annualRate / 12;
   if (r === 0) return loanAmount / termMonths;
   const factor = Math.pow(1 + r, termMonths);
@@ -67,7 +69,12 @@ export function totalHousingBurden(scenario: FinancialScenario): number {
  * Accounts for additional monthly debt if provided.
  */
 export function runMonthlySimulation(scenario: FinancialScenario): MonthlySimulation[] {
-  const totalMonths = scenario.loanTermYears * 12;
+  const loanMonths = Math.max(0, Math.round(scenario.loanTermYears * 12));
+  const totalMonths = Math.min(
+    loanMonths,
+    Math.max(1, Math.round(scenario.simulationHorizonMonths ?? loanMonths)),
+    480,
+  );
   const introRate = scenario.introductoryRate;
   const postRate = scenario.isFixedRate
     ? scenario.introductoryRate
@@ -95,7 +102,7 @@ export function runMonthlySimulation(scenario: FinancialScenario): MonthlySimula
       );
 
   // Post-reset payment (re-amortize remaining balance over remaining term)
-  const postResetPayment = scenario.isFixedRate
+  const postResetPayment = scenario.isFixedRate || introMonths >= totalMonths
     ? introPayment
     : calculateMonthlyPayment(
         balanceAfterIntro,
@@ -117,10 +124,22 @@ export function runMonthlySimulation(scenario: FinancialScenario): MonthlySimula
       month >= scenario.incomeDisruptionStartMonth &&
       month < scenario.incomeDisruptionStartMonth + scenario.incomeDisruptionMonths;
 
-    const income = isDisruption ? 0 : scenario.monthlyIncome;
+    const reducedIncome = scenario.monthlyIncome * (1 - (scenario.incomeReductionPercent ?? 0) / 100);
+    const income = isDisruption ? 0 : reducedIncome;
     const expenses = scenario.monthlyLivingExpenses + housingCosts;
-    const cashFlow = income - expenses - monthlyPayment - additionalDebt;
-    emergencyFund = Math.max(0, emergencyFund + cashFlow);
+    const emergencyExpenseMonth = scenario.unexpectedEmergencyExpenseMonth ?? scenario.incomeDisruptionStartMonth;
+    const oneTimeExpenses = month === emergencyExpenseMonth ? (scenario.plannedMajorExpense ?? 0) : 0;
+    const cashFlow = income - expenses - monthlyPayment - additionalDebt - oneTimeExpenses;
+    emergencyFund += cashFlow;
+    const activeEvents: string[] = [];
+    if (month === 1) activeEvents.push("loan_started");
+    if (isIntro) activeEvents.push("introductory_period");
+    if (isRateReset) activeEvents.push("interest_rate_reset");
+    if (month === scenario.incomeDisruptionStartMonth && scenario.incomeDisruptionMonths > 0) activeEvents.push("income_interruption_started");
+    if (month === scenario.incomeDisruptionStartMonth + scenario.incomeDisruptionMonths && scenario.incomeDisruptionMonths > 0) activeEvents.push("income_interruption_ended");
+    if (oneTimeExpenses > 0) activeEvents.push("emergency_expense");
+    if (cashFlow < 0) activeEvents.push("negative_cashflow");
+    if (emergencyFund <= 0) activeEvents.push("reserve_exhausted");
 
     const paymentToIncomeRatio = scenario.monthlyIncome > 0
       ? (monthlyPayment / scenario.monthlyIncome) * 100
@@ -137,6 +156,8 @@ export function runMonthlySimulation(scenario: FinancialScenario): MonthlySimula
       isRateReset,
       isDisruption,
       paymentToIncomeRatio: round(paymentToIncomeRatio, 1),
+      oneTimeExpenses: round(oneTimeExpenses),
+      activeEvents,
     });
   }
 
@@ -147,6 +168,53 @@ export function runMonthlySimulation(scenario: FinancialScenario): MonthlySimula
 export interface CriticalTurningPointResult {
   month: number;
   hasCriticalBreak: boolean;
+  reason?: "reserve_exhausted" | "reserve_below_three_months" | "three_month_deficit" | "unsustainable_burden" | "none";
+}
+
+/** Return the earliest qualifying financial break, with no invented safe month. */
+export function findEarliestCriticalTurningPoint(
+  simulation: MonthlySimulation[],
+  scenario: FinancialScenario,
+): CriticalTurningPointResult {
+  const postResetPayment = simulation.find((point) => !point.isIntroPeriod)?.monthlyPayment
+    ?? simulation[0]?.monthlyPayment
+    ?? 0;
+  const essentialMonthlyCosts =
+    scenario.monthlyLivingExpenses +
+    totalHousingBurden(scenario) +
+    postResetPayment +
+    (scenario.additionalMonthlyDebt ?? 0);
+  let negativeStreak = 0;
+  let burdenStreak = 0;
+
+  for (const point of simulation) {
+    const burdenRatio = point.monthlyIncome > 0
+      ? point.monthlyExpenses / point.monthlyIncome
+      : Number.POSITIVE_INFINITY;
+    // Temporary configured stress consumes reserves; it does not prove that
+    // the household's normal cash flow is structurally unsustainable.
+    negativeStreak = !point.isDisruption && point.monthlyCashFlow < 0
+      ? negativeStreak + 1
+      : 0;
+    burdenStreak = !point.isDisruption && burdenRatio > 0.75
+      ? burdenStreak + 1
+      : 0;
+
+    if (point.emergencyFund <= 0) {
+      return { month: point.month, hasCriticalBreak: true, reason: "reserve_exhausted" };
+    }
+    if (point.emergencyFund < essentialMonthlyCosts * 3) {
+      return { month: point.month, hasCriticalBreak: true, reason: "reserve_below_three_months" };
+    }
+    if (negativeStreak >= 3) {
+      return { month: point.month, hasCriticalBreak: true, reason: "three_month_deficit" };
+    }
+    if (burdenStreak >= 3) {
+      return { month: point.month, hasCriticalBreak: true, reason: "unsustainable_burden" };
+    }
+  }
+
+  return { month: 0, hasCriticalBreak: false, reason: "none" };
 }
 
 /**
@@ -202,12 +270,8 @@ export function findCriticalTurningPoint(
     return { month: firstNegative.month, hasCriticalBreak: true };
   }
 
-  // No critical break found — return intro period + 1 as default position
-  const totalMonths = scenario.loanTermYears * 12;
-  const introMonths = scenario.isFixedRate
-    ? totalMonths
-    : scenario.introductoryPeriodMonths;
-  return { month: introMonths + 1, hasCriticalBreak: false };
+  // No qualifying break exists; do not invent a timeline position.
+  return { month: 0, hasCriticalBreak: false, reason: "none" };
 }
 
 /**
@@ -414,7 +478,7 @@ export function getScenarioMetrics(scenario: FinancialScenario) {
         introPayment,
       );
 
-  const postResetPayment = scenario.isFixedRate
+  const postResetPayment = scenario.isFixedRate || introMonths >= totalMonths
     ? introPayment
     : calculateMonthlyPayment(
         balanceAfterIntro,
@@ -424,7 +488,18 @@ export function getScenarioMetrics(scenario: FinancialScenario) {
 
   const housingCosts = totalHousingBurden(scenario);
   const totalHousingPost = postResetPayment + housingCosts;
-  const paymentToIncome = (postResetPayment / scenario.monthlyIncome) * 100;
+  const income = scenario.monthlyIncome;
+  const additionalDebt = scenario.additionalMonthlyDebt ?? 0;
+  const recurringHousingObligations =
+    postResetPayment + scenario.monthlyInsurance + scenario.monthlyManagementFees;
+  const paymentToIncome = income > 0 ? (postResetPayment / income) * 100 : 0;
+  const housingToIncome = income > 0 ? (totalHousingPost / income) * 100 : 0;
+  const debtToIncome = income > 0
+    ? ((recurringHousingObligations + additionalDebt) / income) * 100
+    : 0;
+  const cashCommitment = income > 0
+    ? ((totalHousingPost + additionalDebt + scenario.monthlyLivingExpenses) / income) * 100
+    : 0;
   const paymentIncreasePct =
     introPayment > 0
       ? ((postResetPayment - introPayment) / introPayment) * 100
@@ -436,6 +511,9 @@ export function getScenarioMetrics(scenario: FinancialScenario) {
     housingCosts: round(housingCosts),
     totalHousingPost: round(totalHousingPost),
     paymentToIncomeRatio: round(paymentToIncome, 1),
+    housingToIncomeRatio: round(housingToIncome, 1),
+    debtToIncomeRatio: round(debtToIncome, 1),
+    cashCommitmentRatio: round(cashCommitment, 1),
     paymentIncreasePct: round(paymentIncreasePct, 1),
     loanToIncomeRatio: round(
       scenario.loanAmount / (scenario.monthlyIncome * 12),
